@@ -1,0 +1,4 @@
+[submodule "aiyprojects-raspbian"]
+	path = aiyprojects-raspbian
+	url = https://github.com/google/aiyprojects-raspbian.git
+	branch = aiyprojects
