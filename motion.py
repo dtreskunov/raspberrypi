@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-import ptvsd
-ptvsd.enable_attach()
-ptvsd.wait_for_attach()  # blocks execution until debugger is attached
-
 import os
 import sys
 
@@ -15,8 +11,13 @@ import gpiozero
 import pins
 
 motion_sensor = gpiozero.MotionSensor(pins.PIN_A, pull_up=True)
+motion_sensor.when_motion = lambda: print("Motion detected!")
 
 if __name__ == '__main__':
-    print('waiting for motion...')
-    motion_sensor.wait_for_motion()
-    print("Motion detected!")
+    if '--debug' in sys.argv:
+        import ptvsd
+        address = ('0.0.0.0', 5678)
+        ptvsd.enable_attach(address=address)
+        print('Waiting for debugger on {}...'.format(address))
+        ptvsd.wait_for_attach()
+    print('Waiting for motion...')
