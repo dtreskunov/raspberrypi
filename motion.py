@@ -17,4 +17,6 @@ import pins
 motion_sensor = gpiozero.MotionSensor(pins.PIN_A, pull_up=True)
 
 if __name__ == '__main__':
-    print('hello')
+    print('waiting for motion...')
+    motion_sensor.wait_for_motion()
+    print("Motion detected!")

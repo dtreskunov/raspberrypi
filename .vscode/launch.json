@@ -9,7 +9,14 @@
             "type": "python",
             "request": "attach",
             "port": 5678,
-            "host": "localhost"
+            "host": "localhost",
+            "pathMappings": [
+                {
+                    "localRoot": "C:\\Users\\denis\\Development\\raspberrypi",
+                    "remoteRoot": "/home/pi/raspberrypi"
+                },
+                // Add more path mappings
+            ]
         }
     ]
 }
