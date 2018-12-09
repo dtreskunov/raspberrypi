@@ -10,6 +10,7 @@ sys.path.append(os.path.join(
 import gpiozero
 import pins
 import signal
+import time
 
 motion_sensor = gpiozero.MotionSensor(pins.PIN_A, pull_up=True)
 motion_sensor.when_motion = lambda: print("Motion detected!")
@@ -23,4 +24,7 @@ if __name__ == '__main__':
         print('Waiting for debugger on {}...'.format(address))
         ptvsd.wait_for_attach()
     print('Waiting for motion...')
-    signal.pause()
+    # signal.pause()
+    while True:
+        print('value: {}'.format(motion_sensor.value))
+        time.sleep(0.5)
