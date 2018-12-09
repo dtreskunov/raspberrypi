@@ -13,6 +13,7 @@ import signal
 
 motion_sensor = gpiozero.MotionSensor(pins.PIN_A, pull_up=True)
 motion_sensor.when_motion = lambda: print("Motion detected!")
+motion_sensor.when_no_motion = lambda: print("...no motion")
 
 if __name__ == '__main__':
     if '--debug' in sys.argv:
