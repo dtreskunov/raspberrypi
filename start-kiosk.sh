@@ -1,4 +1,6 @@
-#!/usr/bin/env bash -uo pipefail
+#!/usr/bin/env bash
+
+set -uo pipefail
 
 # replace /home/pi/.config/lxsession/LXDE-pi/autostart with:
 #
