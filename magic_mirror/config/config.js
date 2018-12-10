@@ -58,6 +58,28 @@
       }
     },
     {
+      module: "MMM-DHT-Sensor",
+      position: "top_right",
+      config: {
+        // https://github.com/bernardpletikosa/MMM-DHT-Sensor
+        sensorType: 11,
+        sensorPIN: 500, // pins.PIN_B.gpio_spec.pin
+        titleText: 'Indoors',
+      }
+    },
+    {
+      module: "MMM-PIR-Sensor",
+      config: {
+        // https://github.com/paviro/MMM-PIR-Sensor
+        sensorPin: 499, // pins.PIN_A.gpio_spec.pin
+        sensorState: 0, // trigger user presence when the GPIO pin receives 0 value
+        powerSaving: true,
+        powerSavingDelay: 120,
+        powerSavingNotification: true,
+        powerSavingMessage: "Screen is about to be turned off by MMM-PIR-Sensor module",
+      }
+    },
+    {
       module: "currentweather",
       position: "top_right",
       config: {

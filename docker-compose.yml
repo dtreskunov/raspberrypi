@@ -1,7 +1,7 @@
 version: '2'
 services:
   magic_mirror:
-    image: bastilimbach/docker-magicmirror:raspberry
+    build: magic_mirror/docker
     ports:
      - '80:80'
     volumes:
