@@ -59,7 +59,7 @@
 			position: "top_right",
 			config: {
 				location: "Seattle",
-				locationID: "5809844",  //ID from http://bulk.openweathermap.org/sample/; unzip the gz file and find your city
+				//locationID: "5809844",  //ID from http://bulk.openweathermap.org/sample/; unzip the gz file and find your city
 				appid: "ff2b463393e18357bc80461de7a84296"
 			}
 		},
@@ -69,24 +69,24 @@
 			header: "Weather Forecast",
 			config: {
 				location: "Seattle",
-				locationID: "5809844",
+				//locationID: "5809844",
 				appid: "ff2b463393e18357bc80461de7a84296"
 			}
 		},
-		// {
-		// 	module: "newsfeed",
-		// 	position: "bottom_bar",
-		// 	config: {
-		// 		feeds: [
-		// 			{
-		// 				title: "New York Times",
-		// 				url: "http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml"
-		// 			}
-		// 		],
-		// 		showSourceTitle: true,
-		// 		showPublishDate: true
-		// 	}
-		// },
+		{
+			module: "newsfeed",
+			position: "bottom_bar",
+			config: {
+				feeds: [
+					{
+						title: "New York Times",
+						url: "http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+					}
+				],
+				showSourceTitle: true,
+				showPublishDate: true
+			}
+		},
 	]
 
 };

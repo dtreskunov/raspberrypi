@@ -1,0 +1,10 @@
+version: '3'
+services:
+  magic_mirrot:
+    image: bastilimbach/docker-magicmirror:raspberry
+    ports:
+     - '80:80'
+  volumes:
+    - magic_mirror/config:/opt/magic_mirror/config
+    - magic_mirror/modules:/opt/magic_mirror/modules
+
