@@ -16,8 +16,8 @@ from aiy_vision_hat_motion_sensor import AIYVisionHatMotionSensor
 def cur_time():
     return datetime.datetime.now().strftime("%H:%M:%S")
 
-def play_tetris_theme(bpm=120):
-    player = TonePlayer(bpm=bpm)
+def play_tetris_theme(bpm=240):
+    player = TonePlayer(22, bpm=bpm)
     player.play(
         'E5q',
         'Be',
