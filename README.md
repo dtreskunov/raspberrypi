@@ -7,6 +7,9 @@
 
 ## Set up environment
 1. `pip install -r requirements.txt`
+1. Install VS Code extension `Remote VSCode`
+1. Start extension's server
+1. Install the `rcode` CLI tool to work with `Remote VSCode` by following these steps: https://github.com/aurora/rmate
 1. Enable port forwarding: *local*, source port `5678`, destination port `localhost:5678`
 
 ## Install services
