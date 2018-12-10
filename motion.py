@@ -16,40 +16,19 @@ from aiy_vision_hat_motion_sensor import AIYVisionHatMotionSensor
 def cur_time():
     return datetime.datetime.now().strftime("%H:%M:%S")
 
-def play_tetris_theme():
-    player = TonePlayer(22, bpm=240)
-    player.play(
-        'E5q',
-        'Be',
-        'C5e',
-        'D5e',
-        'E5s',
-        'D5s',
-        'C5s',
-        'Be',
-        'Bs',
-        'Aq',
-        'Ae',
-        'C5e',
-        'E5q',
-        'D5e',
-        'C5e',
-        'Bq',
-        'Be',
-        'C5e',
-        'D5q',
-        'E5q',
-        'C5q',
-        'Aq',
-        'Aq'
-    )
-
-
 motion_sensor = AIYVisionHatMotionSensor(pins.PIN_A)
-motion_sensor.when_motion = lambda: print('{}: motion'.format(cur_time()))
-motion_sensor.when_no_motion = lambda: print('{}: no_motion'.format(cur_time()))
+player = TonePlayer(22)
 
-motion_sensor.when_motion = play_tetris_theme
+def when_motion():
+    print('{}: motion'.format(cur_time()))
+    player.play('Cs', 'Es', 'Gq')
+
+def when_no_motion():
+    print('{}: no_motion'.format(cur_time()))
+    player.play('Gs', 'Es', 'Cs')
+
+motion_sensor.when_motion = when_motion
+motion_sensor.when_no_motion = when_no_motion
 
 if __name__ == '__main__':
     if '--debug' in sys.argv:
