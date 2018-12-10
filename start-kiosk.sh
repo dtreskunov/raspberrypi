@@ -1,10 +1,8 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash -uo pipefail
 
 # replace /home/pi/.config/lxsession/LXDE-pi/autostart with:
 #
 # @/home/pi/raspberrypi/start-kiosk.sh
-
-set -uo pipefail
 
 SERVER=http://localhost
 
