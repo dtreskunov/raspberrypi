@@ -32,4 +32,6 @@ wait_for_server() {
 
 kiosk_mode
 wait_for_server
+echo 'server is now up, but we will wait another minute for things to settle down...'
+sleep 60
 chromium-browser --no-sandbox --disable-infobars --start-maximized --noerrdialogs --kiosk --incognito "$SERVER"
