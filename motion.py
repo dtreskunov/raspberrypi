@@ -19,11 +19,11 @@ def cur_time():
 class InvertedMotionSensor(gpiozero.MotionSensor):
     pass
 
-InvertedMotionSensor.motion_detected    = lambda *args, **kwds: return not super.motion_detected(*args, **kwds)
-InvertedMotionSensor.when_motion        = lambda *args, **kwds: return super.when_no_motion(*args, **kwds)
-InvertedMotionSensor.when_no_motion     = lambda *args, **kwds: return super.when_motion(*args, **kwds)
-InvertedMotionSensor.wait_for_motion    = lambda *args, **kwds: return super.wait_for_no_motion(*args, **kwds)
-InvertedMotionSensor.wait_for_no_motion = lambda *args, **kwds: return super.wait_for_motion(*args, **kwds)
+InvertedMotionSensor.motion_detected    = lambda *args, **kwds: not super.motion_detected(*args, **kwds)
+InvertedMotionSensor.when_motion        = lambda *args, **kwds: super.when_no_motion(*args, **kwds)
+InvertedMotionSensor.when_no_motion     = lambda *args, **kwds: super.when_motion(*args, **kwds)
+InvertedMotionSensor.wait_for_motion    = lambda *args, **kwds: super.wait_for_no_motion(*args, **kwds)
+InvertedMotionSensor.wait_for_no_motion = lambda *args, **kwds: super.wait_for_motion(*args, **kwds)
 
 motion_sensor = InvertedMotionSensor(pins.PIN_A, pull_up=True)
 motion_sensor.when_motion = lambda: print('{}: motion'.format(cur_time()))
