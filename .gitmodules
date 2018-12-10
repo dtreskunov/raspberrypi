@@ -3,8 +3,8 @@
 	url = https://github.com/google/aiyprojects-raspbian.git
 	branch = aiyprojects
 [submodule "magic_mirror/modules/MMM-DHT-Sensor"]
-	path = magic_mirror/modules/MMM-DHT-Sensor
+	path = magic_mirror/docker/modules/MMM-DHT-Sensor
 	url = https://github.com/bernardpletikosa/MMM-DHT-Sensor.git
 [submodule "magic_mirror/modules/MMM-PIR-Sensor"]
-	path = magic_mirror/modules/MMM-PIR-Sensor
+	path = magic_mirror/docker/modules/MMM-PIR-Sensor
 	url = https://github.com/paviro/MMM-PIR-Sensor.git
