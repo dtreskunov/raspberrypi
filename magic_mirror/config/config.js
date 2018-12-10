@@ -52,7 +52,10 @@
     },
     {
       module: "compliments",
-      position: "lower_third"
+      position: "lower_third",
+      config: {
+        fadeSpeed: 0,
+      }
     },
     {
       module: "currentweather",
