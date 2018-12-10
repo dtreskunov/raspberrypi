@@ -32,4 +32,4 @@ wait_for_server() {
 
 kiosk_mode
 wait_for_server
-midori -e Fullscreen -a "$SERVER"
+chromium-browser --no-sandbox --disable-infobars --start-maximized --noerrdialogs --kiosk --incognito "$SERVER"
