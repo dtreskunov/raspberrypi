@@ -12,7 +12,7 @@ kiosk_mode() {
     xset -dpms # disable DPMS (Energy Star) features.
     xset s off # disable screen saver
     xset s noblank # don’t blank the video device
-    unclutter # hide mouse pointer
+    unclutter & # hide mouse pointer
 }
 
 check_server() {
