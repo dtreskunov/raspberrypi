@@ -5,6 +5,7 @@ Wants = docker.service
 
 [Service]
 ExecStart = /usr/bin/docker-compose -f /home/pi/raspberrypi/docker-compose.yml up --build
+User = pi
 
 [Install]
 WantedBy = multi-user.target

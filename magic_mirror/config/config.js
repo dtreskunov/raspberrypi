@@ -14,7 +14,7 @@
                         // - another specific IPv4/6 to listen on a specific interface
                         // - "", "0.0.0.0", "::" to listen on any interface
                         // Default, when address config is left out, is "localhost"
-  port: 80,
+  port: 8080,
   ipWhitelist: [],                                       // Set [] to allow all IP addresses
                                                          // or add a specific IPv4 of 192.168.1.5 :
                                                          // ["127.0.0.1", "::ffff:127.0.0.1", "::1", "::ffff:192.168.1.5"],
@@ -51,28 +51,6 @@
       position: "lower_third",
       config: {
         fadeSpeed: 0,
-      }
-    },
-    {
-      module: "MMM-DHT-Sensor",
-      position: "top_right",
-      config: {
-        // https://github.com/bernardpletikosa/MMM-DHT-Sensor
-        sensorType: 11,
-        sensorPIN: 500, // pins.PIN_B.gpio_spec.pin
-        titleText: 'Indoors',
-      }
-    },
-    {
-      module: "MMM-PIR-Sensor",
-      config: {
-        // https://github.com/paviro/MMM-PIR-Sensor
-        sensorPin: 499, // pins.PIN_A.gpio_spec.pin
-        sensorState: 0, // trigger user presence when the GPIO pin receives 0 value
-        powerSaving: true,
-        powerSavingDelay: 120,
-        powerSavingNotification: true,
-        powerSavingMessage: "Screen is about to be turned off by MMM-PIR-Sensor module",
       }
     },
     {

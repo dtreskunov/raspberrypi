@@ -6,7 +6,7 @@ set -uo pipefail
 #
 # @/home/pi/raspberrypi/start-kiosk.sh
 
-SERVER=http://localhost
+SERVER=http://localhost:8080
 
 kiosk_mode() {
     xset -dpms # disable DPMS (Energy Star) features.
