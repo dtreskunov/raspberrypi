@@ -6,4 +6,6 @@ services:
      - '80:80'
     volumes:
       - ./magic_mirror/config:/opt/magic_mirror/config
-
+    privileged: true
+    devices:
+      - '/dev/mem:/dev/mem'
