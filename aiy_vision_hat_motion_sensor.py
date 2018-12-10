@@ -18,7 +18,7 @@ def _negate(func):
     return lambda *args, **kwds: not func(*args, **kwds)
 
 
-AIYVisionHatMotionSensor.motion_detected = _negate(super.motion_detected)
+AIYVisionHatMotionSensor.motion_detected = _negate(MotionSensor.motion_detected)
 AIYVisionHatMotionSensor.when_motion = MotionSensor.when_no_motion
 AIYVisionHatMotionSensor.when_no_motion = MotionSensor.when_motion
 AIYVisionHatMotionSensor.wait_for_motion = MotionSensor.wait_for_no_motion
