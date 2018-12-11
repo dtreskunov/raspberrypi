@@ -3,4 +3,4 @@ import sys
 
 sys.path.append(os.path.join(
     os.path.dirname(os.path.realpath(__file__)),
-    '..', 'aiyprojects-raspbian/src/aiy'))
+    '..', 'aiyprojects-raspbian/src'))

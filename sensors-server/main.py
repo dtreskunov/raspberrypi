@@ -6,7 +6,6 @@ import sys
 
 from async_generator import async_generator, yield_
 
-import pins
 import setup_aiy_path
 from aiy_vision_hat_motion_sensor import AIYVisionHatMotionSensor
 from websocket_broadcaster import WebsocketBroadcaster
@@ -17,7 +16,8 @@ async def motion_sensor_events():
     motion_detected = asyncio.Event()
 
     async def driver_loop():
-        sensor = AIYVisionHatMotionSensor(pins.PIN_A)
+        import aiy.pins
+        sensor = AIYVisionHatMotionSensor(aiy.pins.PIN_A)
         sensor.when_motion = lambda: motion_detected.set()
         while True:
             await asyncio.sleep(100)
