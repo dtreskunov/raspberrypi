@@ -16,10 +16,25 @@ async def motion_sensor(callback):
     while True:
         await asyncio.sleep(10)
 
+async def temperature_humidity_sensor(callback):
+    import aiy.pins
+    import Adafruit_DHT
+    while True:
+        # Try to grab a sensor reading.  Use the read_retry method which will retry up
+        # to 15 times to get a sensor reading (waiting 2 seconds between each retry).
+        humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT11, aiy.pins.PIN_B.gpio_spec.pin)
+        if humidity is not None:
+            callback({'humidity': humidity})
+        if temperature is not None:
+            callback({'temperature': temperature})
+        await asyncio.sleep(10)
+
+
 async def main():
     async with WebsocketBroadcaster() as server:
         await asyncio.wait([
-            motion_sensor(lambda event: server.broadcast({'sensor': 'motion_sensor', 'event': event}))
+            motion_sensor(lambda event: server.broadcast({'sensor': 'motion_sensor', 'event': event})),
+            temperature_humidity_sensor(lambda event: server.broadcast({'sensor': 'temperature_humidity_sensor', 'event': event}))
         ])
 
 if __name__ == '__main__':
