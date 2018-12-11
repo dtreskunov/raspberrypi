@@ -1,0 +1,11 @@
+[Unit]
+Description = magic-mirror server
+After = network.target
+Wants = docker.service
+
+[Service]
+ExecStart = /usr/bin/docker-compose -f /home/pi/raspberrypi/magic_mirror/docker-compose.yml up --build
+User = pi
+
+[Install]
+WantedBy = graphical.target

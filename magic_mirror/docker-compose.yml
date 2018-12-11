@@ -1,0 +1,8 @@
+version: '2'
+services:
+  magic_mirror:
+    build: docker
+    ports:
+     - '8080:8080'
+    volumes:
+      - ./config:/opt/magic_mirror/config

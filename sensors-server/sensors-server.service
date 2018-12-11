@@ -1,0 +1,10 @@
+[Unit]
+Description = Broadcasts Raspberry PI sensor readings to clients connected via websocket
+After = network.target
+
+[Service]
+ExecStart = /home/pi/raspberrypi/sensors-server/main.py
+User = pi
+
+[Install]
+WantedBy = graphical.target

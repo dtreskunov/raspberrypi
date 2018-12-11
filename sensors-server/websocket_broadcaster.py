@@ -36,7 +36,7 @@ class WebsocketBroadcaster:
         def json(self):
             return json.dumps(dict(self._asdict()))
 
-    def __init__(self, certfile=None, keyfile=None, address='0.0.0.0', port=8090):
+    def __init__(self, certfile=None, keyfile=None, address='127.0.0.1', port=8090):
         self.certfile = certfile
         self.keyfile = keyfile
         self.address = address
