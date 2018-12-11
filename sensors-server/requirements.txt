@@ -1,3 +1,4 @@
 ptvsd
 gpiozero
 websockets
+async_generator # only needed for python < 3.6

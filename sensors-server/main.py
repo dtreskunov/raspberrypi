@@ -4,10 +4,12 @@ import asyncio
 import logging
 import sys
 
+from async_generator import yield_, async_generator
+
 import setup_aiy_path
 from websocket_broadcaster import WebsocketBroadcaster
 
-
+@async_generator
 async def motion_sensor():
     import pins
     from aiy_vision_hat_motion_sensor import AIYVisionHatMotionSensor
@@ -19,7 +21,7 @@ async def motion_sensor():
     while True:
         await motion_detected.wait()
         motion_detected.clear()
-        yield 'motion_detected'
+        await yield_('motion_detected')
 
 
 async def main():
