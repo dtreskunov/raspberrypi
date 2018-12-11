@@ -1,10 +1,11 @@
 [Unit]
-Description = Broadcasts Raspberry PI sensor readings to clients connected via websocket
+Description = Broadcasts Raspberry Pi sensor readings to MQTT broker
+Requires = mosquitto.service
 After = network.target
 
 [Service]
-ExecStart = /home/pi/raspberrypi/sensors-server/main.py
+ExecStart = /home/pi/raspberrypi/sensors-server/main.py --host localhost --port 1883
 User = pi
 
 [Install]
-WantedBy = graphical.target
+WantedBy = multi-user.target
