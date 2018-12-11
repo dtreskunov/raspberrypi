@@ -3,3 +3,4 @@ __pycache__
 .DS_Store
 .debhelper
 src/tests/images/*.jpg
+.vscode/settings.json
