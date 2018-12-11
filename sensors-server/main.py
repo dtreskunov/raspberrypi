@@ -14,7 +14,7 @@ async def motion_sensor(callback):
     sensor = AIYVisionHatMotionSensor(aiy.pins.PIN_A)
     sensor.when_motion = lambda: callback('motion_detected')
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(1)
 
 async def temperature_humidity_sensor(callback):
     import aiy.pins
@@ -32,10 +32,17 @@ async def temperature_humidity_sensor(callback):
 
 async def main():
     async with WebsocketBroadcaster() as server:
-        await asyncio.wait([
+        tasks = [
             motion_sensor(lambda event: server.broadcast({'sensor': 'motion_sensor', 'event': event})),
             temperature_humidity_sensor(lambda event: server.broadcast({'sensor': 'temperature_humidity_sensor', 'event': event}))
-        ])
+        ]
+        for x in asyncio.as_completed(tasks):
+            try:
+                await x
+            except Exception as e:
+                print('task finished with exception: {}'.format(e))
+        print('all tasks finished')
+
 
 if __name__ == '__main__':
     if '--debug' in sys.argv:
