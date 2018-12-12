@@ -2,3 +2,4 @@ ptvsd
 gpiozero
 Adafruit_DHT
 paho-mqtt
+Pillow
