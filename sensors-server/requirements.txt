@@ -1,5 +1,7 @@
-ptvsd
-gpiozero
 Adafruit_DHT
+dlib
+gpiozero
+numpy
 paho-mqtt
 Pillow
+ptvsd
