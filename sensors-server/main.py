@@ -42,7 +42,7 @@ def stopwatch(message):
         yield
     finally:
         end = time.monotonic()
-        logger.info('%s: done in %.3fs', message, end - begin)
+        logger.debug('%s: done in %.3fs', message, end - begin)
 
 
 async def face_recognition_task(callback):
@@ -109,7 +109,7 @@ async def face_recognition_task(callback):
                 dlib.rectangle(left=0, top=0, right=image.width, bottom=image.height))
             face_descriptor = face_recognition_model.compute_face_descriptor(
                 image_arr, face_landmarks)
-            return face_descriptor
+            return list(face_descriptor)
 
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model):
         faces = face_detection.get_faces(inference_result)
@@ -126,20 +126,23 @@ async def face_recognition_task(callback):
                 for face in faces:
                     # translate inference result into img coordinates and slice out just the face
                     f_x, f_y, f_w, f_h = face.bounding_box
-                    face_image = image.crop((
-                        max(0, int(scale * f_x)),  # left
-                        max(0, int(scale * f_y)),  # upper
-                        min(image.width, int(scale * (f_x + f_w))),  # right
-                        min(image.height, int(scale * (f_y + f_h))),  # lower
-                    ))
+                    with stopwatch('cropping image'):
+                        face_image = image.crop((
+                            max(0, int(scale * f_x)),  # left
+                            max(0, int(scale * f_y)),  # upper
+                            min(image.width, int(scale * (f_x + f_w))),  # right
+                            min(image.height, int(scale * (f_y + f_h))),  # lower
+                        ))
                     face_descriptor = get_face_descriptor(
                         face_image, shape_predictor, face_recognition_model)
+                    with stopwatch('resizing and converting to uri'):
+                        image_uri = image_to_data_uri(
+                            face_image.resize(size=(100, 100), resample=PIL.Image.LANCZOS))
                     yield {
                         'face_score': face.face_score,
                         'face_descriptor': face_descriptor,
                         'joy_score': face.joy_score,
-                        'image_uri': image_to_data_uri(
-                            face_image.resize(size=(100, 100), resample=PIL.Image.LANCZOS)),
+                        'image_uri': image_uri,
                     }
 
             callback(list(sensor_data_iter()))
@@ -235,9 +238,10 @@ async def main(host, port):
     client.loop_start()
 
     def publish(topic, data):
-        msg = json.dumps(data)
-        logger.debug('publishing to %s: %s', topic, msg)
-        client.publish(topic, msg)
+        with stopwatch('publishing data'):
+            msg = json.dumps(data)
+            logger.debug('publishing to %s: %s', topic, msg)
+            client.publish(topic, msg)
 
     tasks = [
         face_recognition_task(partial(publish, 'sensor/face_recognition')),
