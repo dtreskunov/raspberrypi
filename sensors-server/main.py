@@ -57,7 +57,7 @@ async def face_detection_task(callback):
         if not faces:
             return
 
-        logging.info(
+        logging.debug(
             'detected %s faces, taking snapshot for recognition', len(faces))
         # inference runs on the vision bonnet, which grabs images from the camera directly
         # we need to capture the image separately on the Raspberry
@@ -150,6 +150,8 @@ def mqtt_client(host, port):
         # add subscriptions here
         logger.info('Connected to MQTT broker %s:%s, flags=%s, rc=%s',
                     host, port, flags, rc)
+        logger.info(
+            'Hint: you can monitor MQTT traffic by running `mosquitto_sub -h %s -p %s -t \'#\'', host, port)
 
     def on_disconnect(client, userdata, rc):
         logger.info('Disconnected from MQTT broker %s:%s, rc=%s',
@@ -167,7 +169,7 @@ async def main(host, port):
 
     def publish(topic, data):
         msg = json.dumps(data)
-        logger.info('publishing to %s: %s', topic, msg)
+        logger.debug('publishing to %s: %s', topic, msg)
         client.publish(topic, msg)
 
     tasks = [
@@ -194,6 +196,9 @@ if __name__ == '__main__':
         '--host', help='MQTT broker host', default='localhost')
     parser.add_argument(
         '--port', help='MQTT broker port', default=1883, type=int)
+    parser.add_argument(
+        '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
+
     args = parser.parse_args()
     if args.debug:
         import ptvsd
@@ -202,6 +207,6 @@ if __name__ == '__main__':
         print('Waiting for debugger on {}...'.format(address))
         ptvsd.wait_for_attach()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=getattr(logging, args.loglevel))
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main(args.host, args.port))
