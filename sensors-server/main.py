@@ -49,7 +49,7 @@ def stopwatch(message):
         logger.debug('%s: done in %.3fs', message, end - begin)
 
 
-async def face_recognition_task(callback, shape_predictor_model):
+async def face_recognition_task(callback, face_landmarks_model):
     logger.info('starting face_recognition_task')
 
     def capture_image(camera, **kwds):
@@ -92,14 +92,21 @@ async def face_recognition_task(callback, shape_predictor_model):
             return dest
 
         url_dests = (
-            ('http://dlib.net/files/{}.bz2'.format(shape_predictor_model),
-             '~/.{}'.format(shape_predictor_model)),
+            ('http://dlib.net/files/{}.bz2'.format(face_landmarks_model),
+             '~/.{}'.format(face_landmarks_model)),
             ('http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2',
              '~/.dlib_face_recognition_resnet_model_v1.dat')
         )
         return tuple(get(url, dest) for url, dest in url_dests)
 
-    def get_face_descriptor(image_arr, rectangle, shape_predictor, face_recognition_model):
+    def get_face_landmarks(image_arr, rectangle, shape_predictor):
+        with stopwatch('get_face_landmarks'):
+            left, top, right, bottom = rectangle
+            return shape_predictor(
+                image_arr,
+                dlib.rectangle(left=left, top=top, right=right, bottom=bottom))
+
+    def get_face_descriptor(image_arr, face_landmarks, face_recognition_model):
         '''
         Compute the 128D vector that describes the face in image.
         In general, if two face descriptor vectors have a Euclidean
@@ -107,13 +114,38 @@ async def face_recognition_task(callback, shape_predictor_model):
         person, otherwise they are from different people.
         '''
         with stopwatch('get_face_descriptor'):
-            left, top, right, bottom = rectangle
-            face_landmarks = shape_predictor(
-                image_arr,
-                dlib.rectangle(left=left, top=top, right=right, bottom=bottom))
             face_descriptor = face_recognition_model.compute_face_descriptor(
                 image_arr, face_landmarks)
             return list(face_descriptor)
+
+    def label_face_landmarks(face_landmarks):
+        '''
+        :return: A list of dicts of face feature locations (eyes, nose, etc)
+        '''
+        points = [(p.x, p.y) for p in face_landmarks.parts()]
+
+        # For a definition of each point index, see https://cdn-images-1.medium.com/max/1600/1*AbEg31EgkbXSQehuNJBlWg.png
+        if face_landmarks_model == 'shape_predictor_68_face_landmarks.dat':
+            return {
+                "chin": points[0:17],
+                "left_eyebrow": points[17:22],
+                "right_eyebrow": points[22:27],
+                "nose_bridge": points[27:31],
+                "nose_tip": points[31:36],
+                "left_eye": points[36:42],
+                "right_eye": points[42:48],
+                "top_lip": points[48:55] + [points[64]] + [points[63]] + [points[62]] + [points[61]] + [points[60]],
+                "bottom_lip": points[54:60] + [points[48]] + [points[60]] + [points[67]] + [points[66]] + [points[65]] + [points[64]]
+            }
+        elif face_landmarks_model == 'shape_predictor_5_face_landmarks.dat':
+            return {
+                "nose_tip": [points[4]],
+                "left_eye": points[2:4],
+                "right_eye": points[0:2],
+            }
+        else:
+            logger.warn(
+                'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
 
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model):
         faces = face_detection.get_faces(inference_result)
@@ -141,11 +173,14 @@ async def face_recognition_task(callback, shape_predictor_model):
                         int(scale * min(image.width, f_x + f_w)),  # right
                         int(scale * min(image.height, f_y + f_h))  # bottom
                     )
+                    face_landmarks = get_face_landmarks(
+                        image_arr, f_rectangle, shape_predictor)
                     face_descriptor = get_face_descriptor(
-                        image_arr, f_rectangle, shape_predictor, face_recognition_model)
+                        image_arr, face_landmarks, face_recognition_model)
                     yield {
                         'face_score': face.face_score,
                         'face_descriptor': face_descriptor,
+                        'face_landmarks': label_face_landmarks(face_landmarks),
                         'joy_score': face.joy_score,
                         'rectangle': f_rectangle,
                     }
@@ -284,7 +319,8 @@ if __name__ == '__main__':
         '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
     parser.add_argument(
         '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
-        choices=['shape_predictor_5_face_landmarks.dat', 'shape_predictor_68_face_landmarks.dat'],
+        choices=['shape_predictor_5_face_landmarks.dat',
+                 'shape_predictor_68_face_landmarks.dat'],
         default='shape_predictor_68_face_landmarks.dat')
 
     args = parser.parse_args()
