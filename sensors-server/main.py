@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 INFERENCE_RESOLUTION = (1640, 1232)
 CAPTURE_RESOLUTION = (820, 616)
+JPEG_QUALITY = 75
 
 
 @contextlib.contextmanager
@@ -61,7 +62,7 @@ async def face_recognition_task(callback):
 
     def image_to_data_uri(image):
         stream = io.BytesIO()
-        image.save(stream, format='JPEG')
+        image.save(stream, format='JPEG', quality=JPEG_QUALITY)
         return 'data:image/jpeg;base64,{}'.format(
             base64.b64encode(stream.getvalue()).decode())
 
@@ -121,8 +122,8 @@ async def face_recognition_task(callback):
 
         with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
             # inference runs on the vision bonnet, which grabs images from the camera directly
-            # we need to capture the image separately on the Raspberry
-            image = capture_image(camera, resize = CAPTURE_RESOLUTION, format='jpeg')
+            # we need to capture the image separately on the Raspberry in order to use dlib for face rec
+            image = capture_image(camera, format='jpeg', resize=CAPTURE_RESOLUTION, quality=JPEG_QUALITY)
 
             with stopwatch('numpy.array'):
                 image_arr = numpy.array(image)
@@ -248,7 +249,7 @@ async def main(host, port):
     def publish(topic, data):
         with stopwatch('publishing data'):
             msg = json.dumps(data)
-            logger.debug('publishing to %s: %s', topic, msg)
+            logger.debug('publishing %d-byte JSON message to %s', len(msg), topic)
             client.publish(topic, msg)
 
     tasks = [
