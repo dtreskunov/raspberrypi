@@ -18,7 +18,7 @@ from functools import partial
 
 import numpy
 import paho.mqtt.client as mqtt
-import PIL.Image
+from PIL import Image, ImageDraw, ImageFont
 
 import Adafruit_DHT
 import aiy.pins
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 INFERENCE_RESOLUTION = (1640, 1232)
 CAPTURE_RESOLUTION = (820, 616)
 JPEG_QUALITY = 75
+FONT_FILE = '/usr/share/fonts/truetype/freefont/FreeSans.ttf'
 
 
 @contextlib.contextmanager
@@ -49,7 +50,7 @@ def stopwatch(message):
         logger.debug('%s: done in %.3fs', message, end - begin)
 
 
-async def face_recognition_task(callback, face_landmarks_model):
+async def face_recognition_task(callback, face_landmarks_model, save_annotated_images_to):
     logger.info('starting face_recognition_task')
 
     def capture_image(camera, **kwds):
@@ -58,7 +59,7 @@ async def face_recognition_task(callback, face_landmarks_model):
             camera.capture(stream, **kwds)
             # "Rewind" the stream to the beginning so we can read its content
             stream.seek(0)
-            return PIL.Image.open(stream)
+            return Image.open(stream)
 
     def image_to_data_uri(image):
         stream = io.BytesIO()
@@ -147,6 +148,31 @@ async def face_recognition_task(callback, face_landmarks_model):
             logger.warn(
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
 
+    def annotate_image_with_sensor_data(image, data):
+        'draws on top of the image - save a copy before annotating if you need the original!'
+
+        def draw_rectangle(draw, x0, y0, x1, y1, border, fill=None, outline=None):
+            assert border % 2 == 1
+            for i in range(-border // 2, border // 2 + 1):
+                draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
+                               fill=fill, outline=outline)
+
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.truetype(FONT_FILE, size=25)
+        for face in data['faces']:
+            left, top, right, bottom = face['rectangle']
+            text = 'Joy: %.2f' % face['joy_score']
+            _, text_height = font.getsize(text)
+            margin = 3
+            text_bottom = bottom + margin + text_height + margin
+            draw_rectangle(draw, left, top, right, bottom, 3, outline='white')
+            draw_rectangle(draw, left, bottom, right,
+                           text_bottom, 3, fill='white', outline='white')
+            draw.text((left + 1 + margin, bottom + 1 + margin),
+                      text, font=font, fill='black')
+            for _, points in face['face_landmarks'].items():
+                draw.line(points, fill='red', width=2)
+
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model):
         faces = face_detection.get_faces(inference_result)
         if not faces:
@@ -156,7 +182,7 @@ async def face_recognition_task(callback, face_landmarks_model):
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
             image = capture_image(
-                camera, format='jpeg', resize=CAPTURE_RESOLUTION, quality=JPEG_QUALITY)
+                camera, format='jpeg', quality=JPEG_QUALITY, use_video_port=True)
 
             with stopwatch('numpy.array'):
                 image_arr = numpy.array(image)
@@ -168,19 +194,21 @@ async def face_recognition_task(callback, face_landmarks_model):
                     # translate inference result into image coordinates
                     f_x, f_y, f_w, f_h = face.bounding_box
                     f_rectangle = (
-                        int(scale * max(0, f_x)),  # left
-                        int(scale * max(0, f_y)),  # top
-                        int(scale * min(image.width, f_x + f_w)),  # right
-                        int(scale * min(image.height, f_y + f_h))  # bottom
+                        max(0, int(scale * f_x)),  # left
+                        max(0, int(scale * f_y)),  # top
+                        min(image.width, int(scale * (f_x + f_w))),  # right
+                        min(image.height, int(scale * (f_y + f_h))),  # bottom
                     )
                     face_landmarks = get_face_landmarks(
                         image_arr, f_rectangle, shape_predictor)
                     face_descriptor = get_face_descriptor(
                         image_arr, face_landmarks, face_recognition_model)
+                    labeled_face_landmarks = label_face_landmarks(
+                        face_landmarks)
                     yield {
                         'face_score': face.face_score,
                         'face_descriptor': face_descriptor,
-                        'face_landmarks': label_face_landmarks(face_landmarks),
+                        'face_landmarks': labeled_face_landmarks,
                         'joy_score': face.joy_score,
                         'rectangle': f_rectangle,
                     }
@@ -190,12 +218,22 @@ async def face_recognition_task(callback, face_landmarks_model):
                 'faces': list(sensor_data_iter()),
             }
 
+            if save_annotated_images_to:
+                timestamp = time.strftime('%Y-%m-%d_%H.%M.%S')
+                filename = os.path.expanduser(
+                    '{}/{}.jpg'.format(save_annotated_images_to, timestamp))
+                os.makedirs(os.path.dirname(filename), exist_ok=True)
+                with stopwatch('saving annotated image to {}'.format(filename)):
+                    annotate_image_with_sensor_data(image, data)
+                    image.save(filename)
+
             callback(data)
 
-    shape_predictor_model_path, face_recognition_model_path = get_dlib_data()
-    shape_predictor = dlib.shape_predictor(shape_predictor_model_path)
-    face_recognition_model = dlib.face_recognition_model_v1(
-        face_recognition_model_path)
+    with stopwatch('initializing dlib objects'):
+        shape_predictor_model_path, face_recognition_model_path = get_dlib_data()
+        shape_predictor = dlib.shape_predictor(shape_predictor_model_path)
+        face_recognition_model = dlib.face_recognition_model_v1(
+            face_recognition_model_path)
 
     with contextlib.ExitStack() as stack:
 
@@ -225,14 +263,16 @@ async def face_recognition_task(callback, face_landmarks_model):
         # Forced sensor mode, 1640x1232, full FoV. See:
         # https://picamera.readthedocs.io/en/release-1.13/fov.html#sensor-modes
         # This is the resolution inference run on.
-        camera = stack.enter_context(picamera.PiCamera(
-            sensor_mode=4, resolution=INFERENCE_RESOLUTION))
+        with stopwatch('initialize camera'):
+            camera = stack.enter_context(picamera.PiCamera(
+                sensor_mode=4, resolution=CAPTURE_RESOLUTION))
 
         inference = initialize_inference()
 
         for inference_result in inference.run():
             process_inference_result(
                 inference_result, camera, shape_predictor, face_recognition_model)
+            # yield so other tasks have a chance to run
             await asyncio.sleep(0.01)
 
 
@@ -292,7 +332,7 @@ async def main(args):
 
     tasks = [
         face_recognition_task(
-            partial(publish, 'sensor/face_recognition'), args.face_landmarks_model),
+            partial(publish, 'sensor/face_recognition'), args.face_landmarks_model, args.save_annotated_images_to),
         motion_sensor_task(partial(publish, 'sensor/motion')),
         temperature_humidity_sensor_task(
             partial(publish, 'sensor/temperature_humidity')),
@@ -308,6 +348,7 @@ async def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='Broadcasts Raspberry Pi sensor readings to MQTT broker')
     parser.add_argument(
         '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
@@ -322,6 +363,8 @@ if __name__ == '__main__':
         choices=['shape_predictor_5_face_landmarks.dat',
                  'shape_predictor_68_face_landmarks.dat'],
         default='shape_predictor_68_face_landmarks.dat')
+    parser.add_argument(
+        '--save-annotated-images-to', help='location for saving images; if not set, images will not be saved')
 
     args = parser.parse_args()
     if args.debug:
