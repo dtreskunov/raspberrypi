@@ -34,6 +34,9 @@ from aiy_vision_hat_motion_sensor import AIYVisionHatMotionSensor
 
 logger = logging.getLogger(__name__)
 
+INFERENCE_RESOLUTION = (1640, 1232)
+CAPTURE_RESOLUTION = (820, 616)
+
 
 @contextlib.contextmanager
 def stopwatch(message):
@@ -48,10 +51,10 @@ def stopwatch(message):
 async def face_recognition_task(callback):
     logger.info('starting face_recognition_task')
 
-    def capture_image(camera):
+    def capture_image(camera, **kwds):
         with stopwatch('capture_image'):
             stream = io.BytesIO()
-            camera.capture(stream, format='jpeg')
+            camera.capture(stream, **kwds)
             # "Rewind" the stream to the beginning so we can read its content
             stream.seek(0)
             return PIL.Image.open(stream)
@@ -95,7 +98,7 @@ async def face_recognition_task(callback):
         )
         return tuple(get(url, dest) for url, dest in url_dests)
 
-    def get_face_descriptor(image, shape_predictor, face_recognition_model):
+    def get_face_descriptor(image_arr, rectangle, shape_predictor, face_recognition_model):
         '''
         Compute the 128D vector that describes the face in image.
         In general, if two face descriptor vectors have a Euclidean
@@ -103,10 +106,10 @@ async def face_recognition_task(callback):
         person, otherwise they are from different people.
         '''
         with stopwatch('get_face_descriptor'):
-            image_arr = numpy.array(image)
+            left, top, right, bottom = rectangle
             face_landmarks = shape_predictor(
                 image_arr,
-                dlib.rectangle(left=0, top=0, right=image.width, bottom=image.height))
+                dlib.rectangle(left=left, top=top, right=right, bottom=bottom))
             face_descriptor = face_recognition_model.compute_face_descriptor(
                 image_arr, face_landmarks)
             return list(face_descriptor)
@@ -119,33 +122,38 @@ async def face_recognition_task(callback):
         with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry
-            image = capture_image(camera)
+            image = capture_image(camera, resize = CAPTURE_RESOLUTION, format='jpeg')
+
+            with stopwatch('numpy.array'):
+                image_arr = numpy.array(image)
+            
             scale = get_scale(inference_result, image)
 
             def sensor_data_iter():
                 for face in faces:
-                    # translate inference result into img coordinates and slice out just the face
+                    # translate inference result into image coordinates
                     f_x, f_y, f_w, f_h = face.bounding_box
-                    with stopwatch('cropping image'):
-                        face_image = image.crop((
-                            max(0, int(scale * f_x)),  # left
-                            max(0, int(scale * f_y)),  # upper
-                            min(image.width, int(scale * (f_x + f_w))),  # right
-                            min(image.height, int(scale * (f_y + f_h))),  # lower
-                        ))
+                    f_rectangle = (
+                        int(scale * max(0, f_x)),  # left
+                        int(scale * max(0, f_y)),  # top
+                        int(scale * min(image.width, f_x + f_w)),  # right
+                        int(scale * min(image.height, f_y + f_h))  # bottom
+                    )
                     face_descriptor = get_face_descriptor(
-                        face_image, shape_predictor, face_recognition_model)
-                    with stopwatch('resizing and converting to uri'):
-                        image_uri = image_to_data_uri(
-                            face_image.resize(size=(100, 100), resample=PIL.Image.LANCZOS))
+                        image_arr, f_rectangle, shape_predictor, face_recognition_model)
                     yield {
                         'face_score': face.face_score,
                         'face_descriptor': face_descriptor,
                         'joy_score': face.joy_score,
-                        'image_uri': image_uri,
+                        'rectangle': f_rectangle,
                     }
+            
+            data = {
+                'image_uri': image_to_data_uri(image),
+                'faces': list(sensor_data_iter()),
+            }
 
-            callback(list(sensor_data_iter()))
+            callback(data)
 
     shape_predictor_data, face_recognition_model_data = get_dlib_data()
     shape_predictor = dlib.shape_predictor(shape_predictor_data)
@@ -181,7 +189,7 @@ async def face_recognition_task(callback):
         # https://picamera.readthedocs.io/en/release-1.13/fov.html#sensor-modes
         # This is the resolution inference run on.
         camera = stack.enter_context(picamera.PiCamera(
-            sensor_mode=4, resolution=(1640, 1232)))
+            sensor_mode=4, resolution=INFERENCE_RESOLUTION))
 
         inference = initialize_inference()
 
