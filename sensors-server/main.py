@@ -49,7 +49,7 @@ def stopwatch(message):
         logger.debug('%s: done in %.3fs', message, end - begin)
 
 
-async def face_recognition_task(callback):
+async def face_recognition_task(callback, shape_predictor_model):
     logger.info('starting face_recognition_task')
 
     def capture_image(camera, **kwds):
@@ -77,7 +77,7 @@ async def face_recognition_task(callback):
     def get_dlib_data():
         '''
         Returns a tuple of filenames, downloading from dlib.net and extracting if necessary:
-        1. shape predictor data for dlib.shape_predictor (shape_predictor_5_face_landmarks.dat)
+        1. shape predictor data for dlib.shape_predictor (one of shape_predictor_*_face_landmarks.dat)
         2. face recognition data for dlib.face_recognition_model_v1 ()
         '''
         def get(url, dest):
@@ -92,8 +92,8 @@ async def face_recognition_task(callback):
             return dest
 
         url_dests = (
-            ('http://dlib.net/files/shape_predictor_5_face_landmarks.dat.bz2',
-             '~/.shape_predictor_5_face_landmarks.dat'),
+            ('http://dlib.net/files/{}.bz2'.format(shape_predictor_model),
+             '~/.{}'.format(shape_predictor_model)),
             ('http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2',
              '~/.dlib_face_recognition_resnet_model_v1.dat')
         )
@@ -123,11 +123,12 @@ async def face_recognition_task(callback):
         with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
-            image = capture_image(camera, format='jpeg', resize=CAPTURE_RESOLUTION, quality=JPEG_QUALITY)
+            image = capture_image(
+                camera, format='jpeg', resize=CAPTURE_RESOLUTION, quality=JPEG_QUALITY)
 
             with stopwatch('numpy.array'):
                 image_arr = numpy.array(image)
-            
+
             scale = get_scale(inference_result, image)
 
             def sensor_data_iter():
@@ -148,7 +149,7 @@ async def face_recognition_task(callback):
                         'joy_score': face.joy_score,
                         'rectangle': f_rectangle,
                     }
-            
+
             data = {
                 'image_uri': image_to_data_uri(image),
                 'faces': list(sensor_data_iter()),
@@ -156,10 +157,10 @@ async def face_recognition_task(callback):
 
             callback(data)
 
-    shape_predictor_data, face_recognition_model_data = get_dlib_data()
-    shape_predictor = dlib.shape_predictor(shape_predictor_data)
+    shape_predictor_model_path, face_recognition_model_path = get_dlib_data()
+    shape_predictor = dlib.shape_predictor(shape_predictor_model_path)
     face_recognition_model = dlib.face_recognition_model_v1(
-        face_recognition_model_data)
+        face_recognition_model_path)
 
     with contextlib.ExitStack() as stack:
 
@@ -197,6 +198,7 @@ async def face_recognition_task(callback):
         for inference_result in inference.run():
             process_inference_result(
                 inference_result, camera, shape_predictor, face_recognition_model)
+            await asyncio.sleep(0.01)
 
 
 async def motion_sensor_task(callback):
@@ -242,18 +244,20 @@ def mqtt_client(host, port):
     return client
 
 
-async def main(host, port):
-    client = mqtt_client(host, port)
+async def main(args):
+    client = mqtt_client(args.host, args.port)
     client.loop_start()
 
     def publish(topic, data):
         with stopwatch('publishing data'):
             msg = json.dumps(data)
-            logger.debug('publishing %d-byte JSON message to %s', len(msg), topic)
+            logger.debug('publishing %d-byte JSON message to %s',
+                         len(msg), topic)
             client.publish(topic, msg)
 
     tasks = [
-        face_recognition_task(partial(publish, 'sensor/face_recognition')),
+        face_recognition_task(
+            partial(publish, 'sensor/face_recognition'), args.face_landmarks_model),
         motion_sensor_task(partial(publish, 'sensor/motion')),
         temperature_humidity_sensor_task(
             partial(publish, 'sensor/temperature_humidity')),
@@ -278,6 +282,10 @@ if __name__ == '__main__':
         '--port', help='MQTT broker port', default=1883, type=int)
     parser.add_argument(
         '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
+    parser.add_argument(
+        '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
+        choices=['shape_predictor_5_face_landmarks.dat', 'shape_predictor_68_face_landmarks.dat'],
+        default='shape_predictor_68_face_landmarks.dat')
 
     args = parser.parse_args()
     if args.debug:
@@ -289,4 +297,4 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(args.host, args.port))
+    loop.run_until_complete(main(args))
