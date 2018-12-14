@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.request
 from functools import partial
+from uuid import UUID, uuid4
 
 import numpy
 import paho.mqtt.client as mqtt
@@ -52,6 +53,134 @@ def stopwatch(message):
 
 async def face_recognition_task(callback, face_landmarks_model, save_annotated_images_to):
     logger.info('starting face_recognition_task')
+
+    DATA_DIR = '~/.face_recognition_task'
+
+    class Identity:
+        _dir = os.path.expanduser(os.path.join(DATA_DIR, 'identities'))
+
+        @staticmethod
+        def load(file):
+            with open(file, 'r') as fp:
+                return Identity.from_dict(json.load(fp))
+        
+        @staticmethod
+        def from_dict(data):
+            return Identity(
+                uuid=UUID(data['uuid']),
+                avg_face_descriptor=data['avg_face_descriptor'],
+                n_samples=data['n_samples'],
+                name=data['name']
+            )
+
+        @staticmethod
+        def load_all():
+            identities = []
+            for file in glob.glob('{}/*/data.json'.format(Identity._dir)):
+                try:
+                    identities.append(Identity.load(file))
+                except Exception as e:
+                    logger.warning(
+                        'unable to load FacialIdentity from %s: %s', file, e)
+            return identities
+        
+        def __init__(self, uuid, avg_face_descriptor, n_samples, name):
+            self._uuid = uuid
+            self._avg_face_descriptor = avg_face_descriptor
+            self._n_samples = n_samples
+            self._name = name
+
+        @property
+        def uuid(self):
+            return self._uuid
+        
+        @uuid.setter
+        def uuid(self, uuid):
+            self._uuid = uuid
+
+        @property
+        def avg_face_descriptor(self):
+            return self._avg_face_descriptor
+        
+        @avg_face_descriptor.setter
+        def avg_face_descriptor(self, avg_face_descriptor):
+            self._avg_face_descriptor = avg_face_descriptor
+
+        @property
+        def n_samples(self):
+            return self._n_samples
+        
+        @n_samples.setter
+        def n_samples(self, n_samples):
+            self._n_samples = n_samples
+
+        @property
+        def name(self):
+            return self._name
+        
+        @name.setter
+        def name(self, name):
+            self._name = name
+
+        @property
+        def data_dir(self):
+            return os.path.join(Identity._dir, str(self.uuid))
+
+        def to_dict(self):
+            return {
+                'uuid': str(self.uuid),
+                'avg_face_descriptor': self.avg_face_descriptor,
+                'n_samples': self.n_samples,
+                'name': self.name,
+            }
+
+        def save(self, file=None):
+            if not file:
+                file = os.path.join(self.data_dir, 'data.json')
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+            with open(file, 'w') as fp:
+                json.dump(self.to_dict(), fp)
+                logger.debug('saved %s', file)
+
+    class Classifier:
+        def __init__(self):
+            self._known_identities = Identity.load_all()
+            logger.info('loaded %d identities', len(self._known_identities))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, exc_tb):
+            for i in self._known_identities:
+                i.save()
+
+        def get_identities(self, face_descriptor, thumbnail=None):
+            identities = []
+            for identity in self._known_identities:
+                dist = numpy.linalg.norm(
+                    numpy.array(identity.avg_face_descriptor) - numpy.array(face_descriptor))
+                if dist < 0.6:
+                    logger.debug(
+                        'found an identity within dist=%.2f: name=%s, uuid=%s', dist, identity.name, identity.uuid)
+                    identity.avg_face_descriptor = numpy.average(
+                        [identity.avg_face_descriptor, face_descriptor],
+                        weights=[identity.n_samples, 1],
+                        axis=0).tolist()
+                    identity.n_samples += 1
+                    identities.append(identity)
+            if not identities:
+                uuid = uuid4()
+                new_identity = Identity(
+                    uuid=uuid,
+                    avg_face_descriptor=face_descriptor,
+                    n_samples=1,
+                    name=str(uuid)[:8]
+                )
+                logger.info('no matching identities found - a new one was created with name=%s, uuid=%s',
+                            new_identity.name, new_identity.uuid)
+                self._known_identities.append(new_identity)
+                identities.append(new_identity)
+            return identities
 
     def capture_image(camera, **kwds):
         with stopwatch('capture_image'):
@@ -94,9 +223,9 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
 
         url_dests = (
             ('http://dlib.net/files/{}.bz2'.format(face_landmarks_model),
-             '~/.{}'.format(face_landmarks_model)),
+             '{}/{}'.format(DATA_DIR, face_landmarks_model)),
             ('http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2',
-             '~/.dlib_face_recognition_resnet_model_v1.dat')
+             '{}/dlib_face_recognition_resnet_model_v1.dat'.format(DATA_DIR))
         )
         return tuple(get(url, dest) for url, dest in url_dests)
 
@@ -145,7 +274,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 "right_eye": points[0:2],
             }
         else:
-            logger.warn(
+            logger.warning(
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
             return {}
 
@@ -174,7 +303,12 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
             for _, points in face['face_landmarks'].items():
                 draw.line(points, fill='red', width=2)
 
-    def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model):
+    def save_image(image, file):
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        image.save(file)
+        logger.debug('saved %s', file)
+
+    def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier):
         faces = face_detection.get_faces(inference_result)
         if not faces:
             return
@@ -204,11 +338,24 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                         image_arr, f_rectangle, shape_predictor)
                     face_descriptor = get_face_descriptor(
                         image_arr, face_landmarks, face_recognition_model)
+                    identities = classifier.get_identities(face_descriptor)
+
+                    # save thumbnail in each of the identities' folders if n_samples < 10
+                    identities_needing_thumbnails = [
+                        i for i in identities if i.n_samples < 10]
+                    if identities_needing_thumbnails:
+                        thumbnail = image.crop(f_rectangle)
+                        thumbnail.thumbnail((100, 100))
+                        for identity in identities_needing_thumbnails:
+                            file = os.path.join(
+                                identity.data_dir, '{}.jpg'.format(uuid4()))
+                            save_image(thumbnail, file)
+
                     labeled_face_landmarks = label_face_landmarks(
                         face_landmarks)
                     yield {
                         'face_score': face.face_score,
-                        'face_descriptor': face_descriptor,
+                        'identities': [i.to_dict() for i in identities],
                         'face_landmarks': labeled_face_landmarks,
                         'joy_score': face.joy_score,
                         'rectangle': f_rectangle,
@@ -223,10 +370,9 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 timestamp = time.strftime('%Y-%m-%d_%H.%M.%S')
                 filename = os.path.expanduser(
                     '{}/{}.jpg'.format(save_annotated_images_to, timestamp))
-                os.makedirs(os.path.dirname(filename), exist_ok=True)
                 with stopwatch('saving annotated image to {}'.format(filename)):
                     annotate_image_with_sensor_data(image, data)
-                    image.save(filename)
+                    save_image(image, filename)
 
             callback(data)
 
@@ -269,10 +415,11 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 sensor_mode=4, resolution=CAPTURE_RESOLUTION))
 
         inference = initialize_inference()
+        classifier = stack.enter_context(Classifier())
 
         for inference_result in inference.run():
             process_inference_result(
-                inference_result, camera, shape_predictor, face_recognition_model)
+                inference_result, camera, shape_predictor, face_recognition_model, classifier)
             # yield so other tasks have a chance to run
             await asyncio.sleep(0.01)
 
