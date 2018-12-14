@@ -147,6 +147,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         else:
             logger.warn(
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
+            return {}
 
     def annotate_image_with_sensor_data(image, data):
         'draws on top of the image - save a copy before annotating if you need the original!'
