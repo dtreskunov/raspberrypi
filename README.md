@@ -19,3 +19,17 @@
 1. `sudo systemctl enable magic-mirror-server.service`
 1. `sudo systemctl start magic-mirror-server.service`
 1. `sudo systemctl status magic-mirror-server.service`
+
+## MQTT over Websockets
+In order to configure mosquitto (MQTT broker service) to use the 
+websockets protocol (ws://), create `/etc/mosquitto/conf.d/websockets.conf`:
+```
+# default listener - MQTT protocol
+port 1883
+bind_address 0.0.0.0
+
+# extra listener - Websockets protocol
+listener 1884
+protocol websockets
+bind_address 0.0.0.0
+```
