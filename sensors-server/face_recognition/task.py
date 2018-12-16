@@ -23,7 +23,7 @@ from aiy.vision.inference import (CameraInference, InferenceEngine,
                                   InferenceException)
 from aiy.vision.models import face_detection
 
-from ..util.stopwatch import make_stopwatch
+from util.stopwatch import make_stopwatch
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
