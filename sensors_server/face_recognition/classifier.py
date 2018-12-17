@@ -13,7 +13,7 @@ from .entities import Person
 logger = logging.getLogger(__name__)
 
 FACE_DESCRIPTOR_DIMENSIONS = 128
-THRESHOLD = 0.6
+THRESHOLD = 0.65
 
 
 class Classifier:
@@ -77,10 +77,12 @@ class Classifier:
             dist = numpy.linalg.norm(
                 numpy.array(person.avg_face_descriptor) - numpy.array(face_descriptor))
             if dist > THRESHOLD:
+                logger.debug(
+                    'no match found: closest is (name=%s, uuid=%s) with dist=%.2f', person.name, person.uuid, dist)
                 person = None
             else:
                 logger.debug(
-                    'found a person within dist=%.2f: name=%s, uuid=%s', dist, person.name, person.uuid)
+                    'match found: (name=%s, uuid=%s) is within dist=%.2f: ', person.name, person.uuid, dist)
                 person.avg_face_descriptor = numpy.average(
                     [person.avg_face_descriptor, face_descriptor],
                     weights=[person.n_samples, 1],
@@ -95,6 +97,6 @@ class Classifier:
             person.flush()
             self._insert(person)
             is_new = True
-            logger.info('no matching identities found - a new one was created with name=%s, uuid=%s',
+            logger.info('new person (name=%s, uuid=%s) created',
                         person.name, person.uuid)
         return (person, is_new, dist)
