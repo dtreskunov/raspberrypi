@@ -13,8 +13,7 @@ import urllib.request
 from uuid import UUID, uuid4
 
 import numpy
-from PIL import Image, ImageDraw, ImageFont
-from pony import orm
+import PIL
 
 import dlib
 import picamera
@@ -47,7 +46,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
             camera.capture(stream, **kwds)
             # "Rewind" the stream to the beginning so we can read its content
             stream.seek(0)
-            return Image.open(stream)
+            return PIL.Image.open(stream)
 
     def image_to_data_uri(image):
         stream = io.BytesIO()
@@ -146,8 +145,8 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
                                fill=fill, outline=outline)
 
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.truetype(FONT_FILE, size=15)
+        draw = PIL.ImageDraw.Draw(image)
+        font = PIL.ImageFont.truetype(FONT_FILE, size=15)
         for face in data['faces']:
             left, top, right, bottom = face['rectangle']
             person = face['person']
