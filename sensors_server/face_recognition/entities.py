@@ -1,5 +1,5 @@
 import contextlib
-import uuid as uuid_lib
+import uuid
 
 from pony import orm
 
@@ -7,8 +7,7 @@ db = orm.Database()
 
 
 class Person(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
+    id = orm.PrimaryKey(uuid.UUID, default=uuid.uuid4)
     name = orm.Required(str)
     detected_faces = orm.Set(lambda: DetectedFace)
     avg_face_descriptor = orm.Required(orm.Json)  # float[128]
@@ -16,8 +15,7 @@ class Person(db.Entity):
 
 
 class Image(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
+    id = orm.PrimaryKey(uuid.UUID, default=uuid.uuid4)
     mime_type = orm.Required(str)
     data = orm.Required(bytes)
     width = orm.Required(int)
@@ -26,8 +24,7 @@ class Image(db.Entity):
 
 
 class DetectedFace(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
+    id = orm.PrimaryKey(uuid.UUID, default=uuid.uuid4)
     person = orm.Required(lambda: Person)
     image = orm.Required(lambda: Image)
     face_descriptor = orm.Required(orm.Json)  # float[128]

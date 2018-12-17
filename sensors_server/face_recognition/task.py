@@ -10,7 +10,6 @@ import os.path
 import sys
 import time
 import urllib.request
-from uuid import UUID, uuid4
 
 import numpy
 import PIL.Image
@@ -208,7 +207,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                         'face_score': face.face_score,
                         'person': {
                             'name': person.name,
-                            'uuid': str(person.uuid),
+                            'id': str(person.id),
                             'is_new': is_new,
                             'dist': dist,
                         },

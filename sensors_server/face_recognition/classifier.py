@@ -31,7 +31,7 @@ class Classifier:
     def _initialize_index(self):
         def generator():
             for person in Person.select():
-                yield (person.id, person.face_descriptor)
+                yield (person.id.int, person.face_descriptor)
         is_empty = orm.count(c for c in Person) == 0
         properties = rtree.index.Property()
         properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
@@ -52,11 +52,11 @@ class Classifier:
         return random.choice(self._adjectives).title() + ' ' + random.choice(self._nouns).title()
 
     def _insert(self, person):
-        self._idx.insert(person.id, person.avg_face_descriptor)
+        self._idx.insert(person.id.int, person.avg_face_descriptor)
 
     def _delete(self, person):
         try:
-            self._idx.delete(person.id, self._idx.bounds)
+            self._idx.delete(person.id.int, self._idx.bounds)
         except rtree.core.RTreeError:
             # raised if index is empty - bounds are inverted in this case
             pass
