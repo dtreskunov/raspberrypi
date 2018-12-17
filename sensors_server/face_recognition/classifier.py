@@ -24,7 +24,7 @@ class Classifier:
     @orm.db_session
     def _initialize_index(self):
         def generator():
-            for person in Person:
+            for person in Person.select():
                 yield (person.id, person.face_descriptor)
         properties = rtree.index.Property()
         properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
