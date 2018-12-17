@@ -207,7 +207,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                         'face_score': face.face_score,
                         'person': {
                             'name': person.name,
-                            'id': str(person.id),
+                            'uuid': str(person.uuid),
                             'is_new': is_new,
                             'dist': dist,
                         },

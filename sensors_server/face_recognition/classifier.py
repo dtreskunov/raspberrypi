@@ -31,7 +31,7 @@ class Classifier:
     def _initialize_index(self):
         def generator():
             for person in Person.select():
-                yield (person.id.int, person.avg_face_descriptor, None)
+                yield (person.id, person.avg_face_descriptor, None)
         is_empty = orm.count(c for c in Person) == 0
         properties = rtree.index.Property()
         properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
@@ -52,11 +52,11 @@ class Classifier:
         return random.choice(self._adjectives).title() + ' ' + random.choice(self._nouns).title()
 
     def _insert(self, person):
-        self._idx.insert(person.id.int, person.avg_face_descriptor)
+        self._idx.insert(person.id, person.avg_face_descriptor)
 
     def _delete(self, person):
         try:
-            self._idx.delete(person.id.int, self._idx.bounds)
+            self._idx.delete(person.id, self._idx.bounds)
         except rtree.core.RTreeError:
             # raised if index is empty - bounds are inverted in this case
             pass
@@ -80,7 +80,7 @@ class Classifier:
                 person = None
             else:
                 logger.debug(
-                    'found a person within dist=%.2f: name=%s, id=%s', dist, person.name, person.id)
+                    'found a person within dist=%.2f: name=%s, uuid=%s', dist, person.name, person.uuid)
                 person.avg_face_descriptor = numpy.average(
                     [person.avg_face_descriptor, face_descriptor],
                     weights=[person.n_samples, 1],
@@ -92,8 +92,9 @@ class Classifier:
                 avg_face_descriptor=face_descriptor,
                 n_samples=1,
                 name=self._random_name())
+            person.flush()
             self._insert(person)
             is_new = True
-            logger.info('no matching identities found - a new one was created with name=%s, id=%s',
-                        person.name, person.id)
+            logger.info('no matching identities found - a new one was created with name=%s, uuid=%s',
+                        person.name, person.uuid)
         return (person, is_new, dist)
