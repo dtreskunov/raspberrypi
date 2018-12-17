@@ -13,7 +13,9 @@ import urllib.request
 from uuid import UUID, uuid4
 
 import numpy
-import PIL
+import PIL.Image
+import PIL.ImageDraw
+import PIL.ImageFont
 
 import dlib
 import picamera
