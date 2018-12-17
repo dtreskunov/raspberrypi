@@ -31,7 +31,7 @@ class Classifier:
     def _initialize_index(self):
         def generator():
             for person in Person.select():
-                yield (person.id.int, person.face_descriptor)
+                yield (person.id.int, person.avg_face_descriptor)
         is_empty = orm.count(c for c in Person) == 0
         properties = rtree.index.Property()
         properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
