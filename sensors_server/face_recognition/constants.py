@@ -1,1 +1,1 @@
-DATA_DIR = '~/.face_recognition_task'
+DATA_DIR = '~/.face_recognition'
