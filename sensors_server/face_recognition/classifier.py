@@ -24,7 +24,7 @@ class Classifier:
     def __enter__(self):
         return self
 
-    def __exit__(self, _, _):
+    def __exit__(self, exc_type, exc_value, exc_tb):
         pass
 
     @orm.db_session
