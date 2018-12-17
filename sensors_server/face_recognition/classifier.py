@@ -71,7 +71,7 @@ class Classifier:
         is_new = False
         dist = 0.0
 
-        ids = self._idx.nearest(face_descriptor, 1)
+        ids = list(self._idx.nearest(face_descriptor, 1))
         if ids:
             person = Person[ids[0]]
             dist = numpy.linalg.norm(
