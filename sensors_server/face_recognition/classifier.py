@@ -21,6 +21,12 @@ class Classifier:
         self._initialize_index()
         self._initialize_random_name()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _, _):
+        pass
+
     @orm.db_session
     def _initialize_index(self):
         def generator():
