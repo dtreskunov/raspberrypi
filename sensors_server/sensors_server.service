@@ -4,7 +4,7 @@ Requires = mosquitto.service
 After = network.target
 
 [Service]
-ExecStart = /home/pi/raspberrypi/sensors-server/main.py --host localhost --port 1883
+ExecStart = /home/pi/raspberrypi/sensors_server/main.py --host localhost --port 1883
 User = pi
 
 [Install]

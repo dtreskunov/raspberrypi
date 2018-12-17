@@ -5,3 +5,5 @@ numpy
 paho-mqtt
 Pillow
 ptvsd
+Rtree
+pony
