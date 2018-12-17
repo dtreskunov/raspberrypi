@@ -26,10 +26,14 @@ class Classifier:
         def generator():
             for person in Person.select():
                 yield (person.id, person.face_descriptor)
+        is_empty = orm.count(c for c in Person) == 0
         properties = rtree.index.Property()
         properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
-        self._idx = rtree.index.Index(
-            generator(), properties=properties)
+        if is_empty:
+            self._idx = rtree.index.Index(properties=properties)
+        else:
+            self._idx = rtree.index.Index(
+                generator(), properties=properties)
 
     def _initialize_random_name(self):
         def read_lines(filename):
