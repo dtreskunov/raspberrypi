@@ -274,7 +274,9 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         db_filename = os.path.join(os.path.expanduser(DATA_DIR), 'camera.sqlite')
         os.makedirs(os.path.dirname(db_filename), exist_ok=True)
         stack.enter_context(db_connection(provider='sqlite', filename=db_filename, create_db=True))
-        classifier = stack.enter_context(Classifier())
+
+        with stopwatch('initialize classifier'):
+            classifier = stack.enter_context(Classifier())
 
         for inference_result in inference.run():
             with db_transaction:
