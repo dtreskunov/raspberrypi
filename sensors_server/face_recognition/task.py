@@ -16,6 +16,7 @@ import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
 
+import aiy.vision.annotator
 import dlib
 import picamera
 import picamera.array
@@ -37,9 +38,13 @@ INFERENCE_RESOLUTION = (1640, 1232)
 CAPTURE_RESOLUTION = (820, 616)
 JPEG_QUALITY = 75
 FONT_FILE = '/usr/share/fonts/truetype/freefont/FreeSans.ttf'
+FONT = PIL.ImageFont.truetype(FONT_FILE, size=15)
 
 
-async def face_recognition_task(callback, face_landmarks_model, save_annotated_images_to):
+async def face_recognition_task(callback, *,
+                                face_landmarks_model='shape_predictor_68_face_landmarks.dat',
+                                save_annotated_images_to=None,
+                                show_preview=False):
     logger.info('starting face_recognition_task')
 
     class MyImage():
@@ -92,6 +97,40 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
             with open(file, 'wb') as fp:
                 fp.write(self.bytes)
             logger.debug('saved %s', file)
+
+    class Preview:
+        'wrapper around aiy.vision.annotator.Annotator providing access to underlying PIL.ImageDraw'
+
+        def __init__(self, camera):
+            self._camera = camera
+            self._annotator = None
+            self._draw = None
+
+        def __enter__(self):
+            self._annotator = aiy.vision.annotator.Annotator(
+                camera, bg_color=(0, 0, 0, 0))
+            self._draw = self._annotator._draw
+            self._camera.start_preview()
+            return self
+
+        def __exit__(self, *args, **kwds):
+            self._camera.remove_overlay(self._annotator._overlay)
+            self._annotator = None
+            self._draw = None
+            self._camera.stop_preview()
+
+        @property
+        def draw(self):
+            ':return PIL.ImageDraw if running'
+            return self._draw
+
+        def update(self):
+            if self._annotator:
+                self._annotator.update()
+
+        def clear(self):
+            if self._annotator:
+                self._annotator.clear()
 
     def get_scale(inference_result, image):
         res_h, res_w = inference_result.height, inference_result.width
@@ -175,35 +214,40 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
             return {}
 
-    def annotate(image_entity):
-        ':return PIL.Image: annotated copy of image'
-
-        def draw_rectangle(draw, x0, y0, x1, y1, border, fill=None, outline=None):
+    def draw_face(draw, face: DetectedFace):
+        def draw_rectangle(x0, y0, x1, y1, border, fill=None, outline=None):
             assert border % 2 == 1
             for i in range(-border // 2, border // 2 + 1):
                 draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
                                fill=fill, outline=outline)
 
-        image = MyImage(image_entity.data).pil_image
+        left, top, right, bottom = face.image_region
+        text = '%s (joy: %.2f)' % (
+            face.person.name, face.joy_score)
+        _, text_height = FONT.getsize(text)
+        margin = 3
+        text_bottom = bottom + margin + text_height + margin
+        draw_rectangle(left, top, right, bottom, 3, outline='white')
+        draw_rectangle(left, bottom, right,
+                       text_bottom, 3, fill='white', outline='white')
+        draw.text((left + 1 + margin, bottom + 1 + margin),
+                  text, font=FONT, fill='black')
+        for _, points in face.labeled_landmarks.items():
+            draw.line(points, fill='red', width=1)
+
+    def annotate(image: Image):
+        ':return PIL.Image: annotated copy of image'
+        image = MyImage(image.data).pil_image
         draw = PIL.ImageDraw.Draw(image)
-        font = PIL.ImageFont.truetype(FONT_FILE, size=15)
-        for face_entity in image_entity.detected_faces:
-            left, top, right, bottom = face_entity.image_region
-            text = '%s (joy: %.2f)' % (
-                face_entity.person.name, face_entity.joy_score)
-            _, text_height = font.getsize(text)
-            margin = 3
-            text_bottom = bottom + margin + text_height + margin
-            draw_rectangle(draw, left, top, right, bottom, 3, outline='white')
-            draw_rectangle(draw, left, bottom, right,
-                           text_bottom, 3, fill='white', outline='white')
-            draw.text((left + 1 + margin, bottom + 1 + margin),
-                      text, font=font, fill='black')
-            for _, points in face_entity.labeled_landmarks.items():
-                draw.line(points, fill='red', width=1)
+        for face in image.detected_faces:
+            draw_face(draw, face)
         return image
 
-    def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier):
+    def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier, preview):
+        if preview:
+            preview.clear()
+            preview.update()
+
         faces = face_detection.get_faces(inference_result)
         if not faces:
             return
@@ -276,6 +320,11 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 with stopwatch('saving annotated image to {}'.format(filename)):
                     annotate(image_entity).save(filename)
 
+            if preview:
+                for face in image_entity.detected_faces:
+                    draw_face(preview.draw, face)
+                preview.update()
+
             callback(data)
 
     with stopwatch('initializing dlib objects'):
@@ -327,9 +376,12 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         leds = stack.enter_context(Leds())
         stack.enter_context(PrivacyLed(leds))
 
+        preview = stack.enter_context(
+            Preview(camera)) if show_preview else None
+
         for inference_result in inference.run():
             with db_transaction:
                 process_inference_result(
-                    inference_result, camera, shape_predictor, face_recognition_model, classifier)
+                    inference_result, camera, shape_predictor, face_recognition_model, classifier, preview)
             # yield so other tasks have a chance to run
             await asyncio.sleep(0.01)

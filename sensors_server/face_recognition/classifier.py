@@ -10,7 +10,7 @@ from .entities import DetectedFace, Person, db_transaction
 
 logger = logging.getLogger(__name__)
 
-THRESHOLD = 0.6
+THRESHOLD = 0.5
 
 
 class Classifier:
@@ -55,7 +55,7 @@ class Classifier:
             person = closest_seen_face.person
             new_face.person = person
             logger.debug(
-                'match found: (name=%s, id=%s) is within dist=%.2f: ', person.name, person.id, dist)
+                'match found: (name=%s, id=%s) is within dist=%.2f', person.name, person.id, dist)
         else:
             person = Person(name=self._random_name())
             is_new = True
