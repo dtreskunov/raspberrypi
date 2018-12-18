@@ -47,8 +47,10 @@ class Classifier:
                     numpy.array(seen_face.descriptor) - new_descriptor)
                 yield (seen_face, dist)
 
-        closest_seen_face, dist = sorted(
-            generator(), key=lambda pair: pair[1])[0]
+        sorted_faces_with_distances = sorted(
+            generator(), key=lambda pair: pair[1])
+        closest_seen_face, dist = sorted_faces_with_distances[0] if sorted_faces_with_distances else (
+            None, 0.0)
         if closest_seen_face and dist < THRESHOLD and closest_seen_face.person is not None:
             person = closest_seen_face.person
             new_face.person = person
