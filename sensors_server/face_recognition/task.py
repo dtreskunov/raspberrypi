@@ -191,8 +191,9 @@ async def face_recognition_task(callback, *,
                                fill=fill, outline=outline)
 
         left, top, right, bottom = face.image_region
+        name = face.person.name if face.person else 'N/A'
         text = '%s (joy: %.2f)' % (
-            face.person.name, face.joy_score)
+            name, face.joy_score)
         _, text_height = FONT.getsize(text)
         margin = 3
         text_bottom = bottom + margin + text_height + margin
