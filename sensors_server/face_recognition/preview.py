@@ -22,34 +22,6 @@ def _round_buffer_dims(dims):
     the next multiple of 16 for the width."""
     return (_round_to_bit(dims[0], 5), _round_to_bit(dims[1], 4))
 
-# MMALPort has a bug in enable.wrapper, where it always calls
-# self._pool.send_buffer(block=False) regardless of the port direction.
-# This is in contrast to setup time when it only calls
-# self._pool.send_all_buffers(block=False)
-# if self._port[0].type == mmal.MMAL_PORT_TYPE_OUTPUT.
-# Because of this bug updating an overlay once will log a MMAL_EAGAIN
-# error every update. This is safe to ignore as we the user is driving
-# the renderer input port with calls to update() that dequeue buffers
-# and sends them to the input port (so queue is empty on when
-# send_all_buffers(block=False) is called from wrapper).
-# As a workaround, monkey patch MMALPortPool.send_buffer and
-# silence the "error" if thrown by our overlay instance.
-
-
-def _monkey_patch_picamera():
-    original_send_buffer = picamera.mmalobj.MMALPortPool.send_buffer
-
-    def silent_send_buffer(zelf, *args, **kwargs):
-        try:
-            original_send_buffer(zelf, *args, **kwargs)
-        except picamera.exc.PiCameraMMALError as error:
-            # Only silence MMAL_EAGAIN for our target instance.
-            our_target = self._overlay.renderer.inputs[0].pool == zelf
-            if not our_target or error.status != 14:
-                raise error
-
-    picamera.mmalobj.MMALPortPool.send_buffer = silent_send_buffer
-
 
 class Preview:
     '''Utility for managing annotations on the camera preview
@@ -74,6 +46,32 @@ class Preview:
     def __exit__(self, *args, **kwds):
         self._camera.remove_overlay(self._overlay)
         self._camera.stop_preview()
+
+    # MMALPort has a bug in enable.wrapper, where it always calls
+    # self._pool.send_buffer(block=False) regardless of the port direction.
+    # This is in contrast to setup time when it only calls
+    # self._pool.send_all_buffers(block=False)
+    # if self._port[0].type == mmal.MMAL_PORT_TYPE_OUTPUT.
+    # Because of this bug updating an overlay once will log a MMAL_EAGAIN
+    # error every update. This is safe to ignore as we the user is driving
+    # the renderer input port with calls to update() that dequeue buffers
+    # and sends them to the input port (so queue is empty on when
+    # send_all_buffers(block=False) is called from wrapper).
+    # As a workaround, monkey patch MMALPortPool.send_buffer and
+    # silence the "error" if thrown by our overlay instance.
+    def _monkey_patch_picamera(self):
+        original_send_buffer = picamera.mmalobj.MMALPortPool.send_buffer
+
+        def silent_send_buffer(zelf, *args, **kwargs):
+            try:
+                original_send_buffer(zelf, *args, **kwargs)
+            except picamera.exc.PiCameraMMALError as error:
+                # Only silence MMAL_EAGAIN for our target instance.
+                our_target = self._overlay.renderer.inputs[0].pool == zelf
+                if not our_target or error.status != 14:
+                    raise error
+
+        picamera.mmalobj.MMALPortPool.send_buffer = silent_send_buffer
 
     @property
     def draw(self):
