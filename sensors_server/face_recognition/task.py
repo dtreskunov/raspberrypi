@@ -107,10 +107,10 @@ async def face_recognition_task(callback, *,
             self._draw = None
 
         def __enter__(self):
+            self._camera.start_preview()
             self._annotator = aiy.vision.annotator.Annotator(
                 camera, bg_color=(0, 0, 0, 0))
             self._draw = self._annotator._draw
-            self._camera.start_preview()
             return self
 
         def __exit__(self, *args, **kwds):
