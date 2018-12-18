@@ -306,9 +306,6 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 else:
                     raise Exception('unable to start CameraInference')
 
-        leds = stack.enter_context(Leds())
-        stack.enter_context(PrivacyLed(leds))
-
         # Forced sensor mode, 1640x1232, full FoV. See:
         # https://picamera.readthedocs.io/en/release-1.13/fov.html#sensor-modes
         # This is the resolution inference run on.
@@ -326,6 +323,9 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 provider='sqlite', filename=db_filename, create_db=True))
 
         classifier = Classifier()
+
+        leds = stack.enter_context(Leds())
+        stack.enter_context(PrivacyLed(leds))
 
         for inference_result in inference.run():
             with db_transaction:
