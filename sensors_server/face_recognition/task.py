@@ -45,7 +45,8 @@ FONT = PIL.ImageFont.truetype(FONT_FILE, size=15)
 async def face_recognition_task(callback, *,
                                 face_landmarks_model='shape_predictor_68_face_landmarks.dat',
                                 save_annotated_images_to=None,
-                                show_preview=False):
+                                show_preview=False,
+                                skip_recognition=False):
     logger.info('starting face_recognition_task')
 
     class MyImage():
@@ -245,7 +246,7 @@ async def face_recognition_task(callback, *,
                     face_landmarks = get_face_landmarks(
                         image, image_region, shape_predictor)
                     face_descriptor = get_face_descriptor(
-                        image, face_landmarks, face_recognition_model)
+                        image, face_landmarks, face_recognition_model) if not skip_recognition else None
                     labeled_face_landmarks = label_face_landmarks(
                         face_landmarks)
 
@@ -257,22 +258,24 @@ async def face_recognition_task(callback, *,
                         face_score=face.face_score,
                         joy_score=face.joy_score,
                     )
-                    with stopwatch('recognize_person'):
-                        person_entity, is_new, dist = classifier.recognize_person(
-                            face_entity)
-
-                    yield {
+                    result = {
                         'image_region': image_region,
                         'labeled_landmarks': face_entity.labeled_landmarks,
                         'face_score': face_entity.face_score,
                         'joy_score': face_entity.joy_score,
-                        'person': {
-                            'name': person_entity.name,
-                            'uuid': str(person_entity.id),
-                            'is_new': is_new,
-                            'dist': dist,
-                        },
                     }
+                    if not skip_recognition:
+                        with stopwatch('recognize_person'):
+                            person_entity, is_new, dist = classifier.recognize_person(
+                                face_entity)
+                            result['person'] = {
+                                'name': person_entity.name,
+                                'uuid': str(person_entity.id),
+                                'is_new': is_new,
+                                'dist': dist,
+                            }
+
+                    yield result
 
             data = {
                 'image_uri': image.data_uri,

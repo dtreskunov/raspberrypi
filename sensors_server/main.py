@@ -53,7 +53,8 @@ async def main(args):
             partial(publish, 'sensor/face_recognition'),
             face_landmarks_model=args.face_landmarks_model,
             save_annotated_images_to=args.save_annotated_images_to,
-            show_preview=args.preview),
+            show_preview=args.preview,
+            skip_recognition=args.skip_recognition),
         motion_sensor_task(partial(publish, 'sensor/motion')),
         temperature_humidity_sensor_task(
             partial(publish, 'sensor/temperature_humidity')),
@@ -88,6 +89,8 @@ if __name__ == '__main__':
         '--save-annotated-images-to', help='location for saving images; if not set, images will not be saved')
     parser.add_argument(
         '--preview', help='enable real-time camera preview', action='store_true')
+    parser.add_argument(
+        '--skip-recognition', help='skip face recognition (slow)', action='store_true')
 
     args = parser.parse_args()
     if args.debug:
