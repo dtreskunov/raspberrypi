@@ -56,7 +56,7 @@ async def main(args):
             save_annotated_images_to=args.save_annotated_images_to,
             show_preview=args.preview,
             skip_recognition=args.skip_recognition,
-            roll_back_transactions=args.roll_back_transactions),
+            rollback_transactions=args.rollback_transactions),
         motion_sensor_task(partial(publish, 'sensor/motion')),
         temperature_humidity_sensor_task(
             partial(publish, 'sensor/temperature_humidity')),

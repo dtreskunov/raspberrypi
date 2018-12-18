@@ -47,7 +47,7 @@ async def face_recognition_task(callback, *,
                                 save_annotated_images_to=None,
                                 show_preview=False,
                                 skip_recognition=False,
-                                roll_back_transactions=False):
+                                rollback_transactions=False):
     logger.info('starting face_recognition_task')
 
     class MyImage():
@@ -354,7 +354,7 @@ async def face_recognition_task(callback, *,
             with db_transaction:
                 process_inference_result(
                     inference_result, camera, shape_predictor, face_recognition_model, classifier, preview)
-                if roll_back_transactions:
+                if rollback_transactions:
                     db_rollback()
             # yield so other tasks have a chance to run
             await asyncio.sleep(0.01)
