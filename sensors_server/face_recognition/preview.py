@@ -28,7 +28,7 @@ class Preview:
     access to underlying PIL.ImageDraw'''
 
     def __init__(self, camera: picamera.PiCamera, bg_color=(0, 0, 0, 0), dimensions=None):
-        _monkey_patch_picamera()
+        self._monkey_patch_picamera()
         self._camera = camera
         self._bg_color = bg_color
         self._dims = dimensions if dimensions else camera.resolution
