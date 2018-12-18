@@ -27,7 +27,7 @@ class Preview:
     '''Utility for managing annotations on the camera preview
     access to underlying PIL.ImageDraw'''
 
-    def __init__(self, camera: picamera.Camera, bg_color=(0, 0, 0, 0), dimensions=None):
+    def __init__(self, camera: picamera.PiCamera, bg_color=(0, 0, 0, 0), dimensions=None):
         self._camera = camera
         self._bg_color = bg_color
         self._dims = dimensions if dimensions else camera.resolution
