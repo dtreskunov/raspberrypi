@@ -211,12 +211,11 @@ async def face_recognition_task(callback, *,
         return image
 
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier, preview):
-        if preview:
-            preview.clear()
-            preview.update()
-
         faces = face_detection.get_faces(inference_result)
         if not faces:
+            if preview:
+                preview.clear()
+                preview.update()
             return
 
         with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
@@ -288,6 +287,7 @@ async def face_recognition_task(callback, *,
                     annotate(image_entity).save(filename)
 
             if preview:
+                preview.clear()
                 for face in image_entity.detected_faces:
                     draw_face(preview.draw, face)
                 preview.update()
