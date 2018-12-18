@@ -69,7 +69,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
 
         @property
         def pil_image(self):
-            if not self._pil_image:
+            if self._pil_image is None:
                 with stopwatch('PIL.Image.open'):
                     stream = io.BytesIO(self._bytes)
                     self._pil_image = PIL.Image.open(stream)
@@ -77,7 +77,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
 
         @property
         def numpy_array(self):
-            if not self._numpy_array:
+            if self._numpy_array is None:
                 with stopwatch('numpy.array'):
                     self._numpy_array = numpy.array(self.pil_image)
             return self._numpy_array
