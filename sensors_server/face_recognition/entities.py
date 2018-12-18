@@ -9,9 +9,6 @@ db_transaction = orm.db_session
 
 logger = logging.getLogger(__name__)
 
-if logger.getEffectiveLevel() == logging.DEBUG:
-    orm.set_sql_debug()
-
 
 class Person(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
@@ -41,10 +38,11 @@ class DetectedFace(db.Entity):
 
 @contextlib.contextmanager
 def db_connection(*args, **kwds):
-    db.bind(*args, **kwds)
-    db.generate_mapping(create_tables=True)
-    yield
-    db.disconnect()
+    with orm.sql_debugging(debug=(logger.getEffectiveLevel() == logging.DEBUG)):
+        db.bind(*args, **kwds)
+        db.generate_mapping(create_tables=True)
+        yield
+        db.disconnect()
 
 
 if __name__ == '__main__':
