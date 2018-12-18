@@ -130,7 +130,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         with stopwatch('get_face_landmarks'):
             left, top, right, bottom = rectangle
             return shape_predictor(
-                image.numpy_arr,
+                image.numpy_array,
                 dlib.rectangle(left=left, top=top, right=right, bottom=bottom))
 
     def get_face_descriptor(image, face_landmarks, face_recognition_model):
@@ -142,7 +142,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         '''
         with stopwatch('get_face_descriptor'):
             face_descriptor = face_recognition_model.compute_face_descriptor(
-                image.numpy_arr, face_landmarks)
+                image.numpy_array, face_landmarks)
             return list(face_descriptor)
 
     def label_face_landmarks(face_landmarks):
