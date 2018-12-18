@@ -6,6 +6,7 @@ from pony import orm
 
 db = orm.Database()
 db_transaction = orm.db_session
+db_rollback = orm.rollback
 
 logger = logging.getLogger(__name__)
 

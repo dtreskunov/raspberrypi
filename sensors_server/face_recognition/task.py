@@ -29,7 +29,7 @@ from util.stopwatch import make_stopwatch
 from .classifier import Classifier
 from .constants import DATA_DIR
 from .entities import (DetectedFace, Image, Person, db_connection,
-                       db_transaction)
+                       db_rollback, db_transaction)
 from .preview import Preview
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,8 @@ async def face_recognition_task(callback, *,
                                 face_landmarks_model='shape_predictor_68_face_landmarks.dat',
                                 save_annotated_images_to=None,
                                 show_preview=False,
-                                skip_recognition=False):
+                                skip_recognition=False,
+                                roll_back_transactions=False):
     logger.info('starting face_recognition_task')
 
     class MyImage():
@@ -353,5 +354,7 @@ async def face_recognition_task(callback, *,
             with db_transaction:
                 process_inference_result(
                     inference_result, camera, shape_predictor, face_recognition_model, classifier, preview)
+                if roll_back_transactions:
+                    db_rollback()
             # yield so other tasks have a chance to run
             await asyncio.sleep(0.01)

@@ -16,6 +16,7 @@ from util.stopwatch import make_stopwatch
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
 
+
 def mqtt_client(host, port):
     logger.info(
         'Connecting to MQTT broker %s:%s. Hint: you can monitor MQTT traffic by running: mosquitto_sub -h %s -p %s -t \'#\'', host, port, host, port)
@@ -54,7 +55,8 @@ async def main(args):
             face_landmarks_model=args.face_landmarks_model,
             save_annotated_images_to=args.save_annotated_images_to,
             show_preview=args.preview,
-            skip_recognition=args.skip_recognition),
+            skip_recognition=args.skip_recognition,
+            roll_back_transactions=args.roll_back_transactions),
         motion_sensor_task(partial(publish, 'sensor/motion')),
         temperature_humidity_sensor_task(
             partial(publish, 'sensor/temperature_humidity')),
@@ -91,6 +93,8 @@ if __name__ == '__main__':
         '--preview', help='enable real-time camera preview', action='store_true')
     parser.add_argument(
         '--skip-recognition', help='skip face recognition (slow)', action='store_true')
+    parser.add_argument(
+        '--rollback-transactions', help='do not store anything in the database', action='store_true')
 
     args = parser.parse_args()
     if args.debug:
