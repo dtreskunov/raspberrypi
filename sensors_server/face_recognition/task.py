@@ -239,11 +239,16 @@ async def face_recognition_task(callback, *,
                 for face in faces:
                     # translate inference result into image coordinates
                     f_x, f_y, f_w, f_h = face.bounding_box
+                    adjust_factor = 0.9 # seems to improve face_landmarks
+                    w = f_w * adjust_factor
+                    h = f_h * adjust_factor
+                    x = f_x + (f_w - w)/2
+                    y = f_y + (f_h - h)/2
                     image_region = (
-                        max(0, int(scale * f_x)),  # left
-                        max(0, int(scale * f_y)),  # top
-                        min(image.width, int(scale * (f_x + f_w))),  # right
-                        min(image.height, int(scale * (f_y + f_h))),  # bottom
+                        max(0, int(scale * x)),  # left
+                        max(0, int(scale * y)),  # top
+                        min(image.width, int(scale * (x + w))),  # right
+                        min(image.height, int(scale * (y + h))),  # bottom
                     )
                     face_landmarks = get_face_landmarks(
                         image, image_region, shape_predictor)
