@@ -5,5 +5,5 @@ numpy
 paho-mqtt
 Pillow
 ptvsd
-Rtree
+#scikit-learn
 pony

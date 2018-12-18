@@ -1,23 +1,26 @@
 import contextlib
+import logging
 import uuid as uuid_lib
 
 from pony import orm
 
 db = orm.Database()
+db_transaction = orm.db_session
+
+logger = logging.getLogger(__name__)
+
+if logger.getEffectiveLevel() == logging.DEBUG:
+    orm.set_sql_debug()
 
 
 class Person(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
+    id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
     name = orm.Required(str)
     detected_faces = orm.Set(lambda: DetectedFace)
-    avg_face_descriptor = orm.Required(orm.Json)  # float[128]
-    n_samples = orm.Required(int)
 
 
 class Image(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
+    id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
     mime_type = orm.Required(str)
     data = orm.Required(bytes)
     width = orm.Required(int)
@@ -26,16 +29,14 @@ class Image(db.Entity):
 
 
 class DetectedFace(db.Entity):
-    id = orm.PrimaryKey(int, auto=True)
-    uuid = orm.Required(uuid_lib.UUID, default=uuid_lib.uuid4, index=True)
-    person = orm.Required(lambda: Person)
-    image = orm.Required(lambda: Image)
-    face_descriptor = orm.Required(orm.Json)  # float[128]
-    face_landmarks = orm.Required(orm.Json)  # {"left_eye":[(123,456)]}
-    bbox_left = orm.Required(int)
-    bbox_top = orm.Required(int)
-    bbox_right = orm.Required(int)
-    bbox_bottom = orm.Required(int)
+    id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
+    image = orm.Optional(lambda: Image)
+    image_region = orm.Required(orm.Json)  # [left, top, right, bottom]
+    descriptor = orm.Required(orm.Json)  # float[128]
+    labeled_landmarks = orm.Required(orm.Json)  # {"left_eye":[(123,456)]}
+    face_score = orm.Optional(float)
+    joy_score = orm.Optional(float)
+    person = orm.Optional(lambda: Person)
 
 
 @contextlib.contextmanager
@@ -44,9 +45,6 @@ def db_connection(*args, **kwds):
     db.generate_mapping(create_tables=True)
     yield
     db.disconnect()
-
-
-db_transaction = orm.db_session
 
 
 if __name__ == '__main__':

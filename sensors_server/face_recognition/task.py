@@ -27,7 +27,8 @@ from util.stopwatch import make_stopwatch
 
 from .classifier import Classifier
 from .constants import DATA_DIR
-from .entities import DetectedFace, Image, Person, db_connection, db_transaction
+from .entities import (DetectedFace, Image, Person, db_connection,
+                       db_transaction)
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
@@ -41,19 +42,56 @@ FONT_FILE = '/usr/share/fonts/truetype/freefont/FreeSans.ttf'
 async def face_recognition_task(callback, face_landmarks_model, save_annotated_images_to):
     logger.info('starting face_recognition_task')
 
-    def capture_image(camera, **kwds):
-        with stopwatch('capture_image'):
-            stream = io.BytesIO()
-            camera.capture(stream, **kwds)
-            # "Rewind" the stream to the beginning so we can read its content
-            stream.seek(0)
-            return PIL.Image.open(stream)
+    class MyImage():
+        @staticmethod
+        def capture(camera, **kwds):
+            with stopwatch('MyImage.capture'):
+                stream = io.BytesIO()
+                camera.capture(stream, **kwds)
+                return MyImage(stream.getvalue())
 
-    def image_to_data_uri(image):
-        stream = io.BytesIO()
-        image.save(stream, format='JPEG', quality=JPEG_QUALITY)
-        return 'data:image/jpeg;base64,{}'.format(
-            base64.b64encode(stream.getvalue()).decode())
+        def __init__(self, _bytes):
+            self._bytes = _bytes
+            self._pil_image = None
+            self._numpy_array = None
+
+        @property
+        def bytes(self):
+            return self._bytes
+
+        @property
+        def width(self):
+            return self.pil_image.width
+
+        @property
+        def height(self):
+            return self.pil_image.height
+
+        @property
+        def pil_image(self):
+            if not self._pil_image:
+                with stopwatch('PIL.Image.open'):
+                    stream = io.BytesIO(self._bytes)
+                    self._pil_image = PIL.Image.open(stream)
+            return self._pil_image
+
+        @property
+        def numpy_array(self):
+            if not self._numpy_array:
+                with stopwatch('numpy.array'):
+                    self._numpy_array = numpy.array(self.pil_image)
+            return self._numpy_array
+
+        @property
+        def data_uri(self):
+            return 'data:image/jpeg;base64,{}'.format(
+                base64.b64encode(self.bytes).decode())
+
+        def save(self, file):
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+            with open(file, 'wb') as fp:
+                fp.write(self.bytes)
+            logger.debug('saved %s', file)
 
     def get_scale(inference_result, image):
         res_h, res_w = inference_result.height, inference_result.width
@@ -88,14 +126,14 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         )
         return tuple(get(url, dest) for url, dest in url_dests)
 
-    def get_face_landmarks(image_arr, rectangle, shape_predictor):
+    def get_face_landmarks(image, rectangle, shape_predictor):
         with stopwatch('get_face_landmarks'):
             left, top, right, bottom = rectangle
             return shape_predictor(
-                image_arr,
+                image.numpy_arr,
                 dlib.rectangle(left=left, top=top, right=right, bottom=bottom))
 
-    def get_face_descriptor(image_arr, face_landmarks, face_recognition_model):
+    def get_face_descriptor(image, face_landmarks, face_recognition_model):
         '''
         Compute the 128D vector that describes the face in image.
         In general, if two face descriptor vectors have a Euclidean
@@ -104,7 +142,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         '''
         with stopwatch('get_face_descriptor'):
             face_descriptor = face_recognition_model.compute_face_descriptor(
-                image_arr, face_landmarks)
+                image.numpy_arr, face_landmarks)
             return list(face_descriptor)
 
     def label_face_landmarks(face_landmarks):
@@ -137,8 +175,8 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
             return {}
 
-    def annotate_image_with_sensor_data(image, data):
-        'draws on top of the image - save a copy before annotating if you need the original!'
+    def annotate(image_entity):
+        ':return PIL.Image: annotated copy of image'
 
         def draw_rectangle(draw, x0, y0, x1, y1, border, fill=None, outline=None):
             assert border % 2 == 1
@@ -146,12 +184,13 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
                                fill=fill, outline=outline)
 
+        image = MyImage(image_entity.data).pil_image
         draw = PIL.ImageDraw.Draw(image)
         font = PIL.ImageFont.truetype(FONT_FILE, size=15)
-        for face in data['faces']:
-            left, top, right, bottom = face['rectangle']
-            person = face['person']
-            text = '%s (joy: %.2f)' % (person['name'], face['joy_score'])
+        for face_entity in image_entity.detected_faces:
+            left, top, right, bottom = face_entity.image_region
+            text = '%s (joy: %.2f)' % (
+                face_entity.person.name, face_entity.joy_score)
             _, text_height = font.getsize(text)
             margin = 3
             text_bottom = bottom + margin + text_height + margin
@@ -160,13 +199,9 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                            text_bottom, 3, fill='white', outline='white')
             draw.text((left + 1 + margin, bottom + 1 + margin),
                       text, font=font, fill='black')
-            for _, points in face['face_landmarks'].items():
+            for _, points in face_entity.labeled_landmarks.items():
                 draw.line(points, fill='red', width=1)
-
-    def save_image(image, file):
-        os.makedirs(os.path.dirname(file), exist_ok=True)
-        image.save(file)
-        logger.debug('saved %s', file)
+        return image
 
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier):
         faces = face_detection.get_faces(inference_result)
@@ -176,11 +211,14 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
         with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
-            image = capture_image(
+            image = MyImage.capture(
                 camera, format='jpeg', quality=JPEG_QUALITY, use_video_port=True)
-
-            with stopwatch('numpy.array'):
-                image_arr = numpy.array(image)
+            image_entity = Image(
+                mime_type='image/jpeg',
+                data=image.bytes,
+                width=image.width,
+                height=image.height
+            )
 
             scale = get_scale(inference_result, image)
 
@@ -188,37 +226,47 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 for face in faces:
                     # translate inference result into image coordinates
                     f_x, f_y, f_w, f_h = face.bounding_box
-                    f_rectangle = (
+                    image_region = (
                         max(0, int(scale * f_x)),  # left
                         max(0, int(scale * f_y)),  # top
                         min(image.width, int(scale * (f_x + f_w))),  # right
                         min(image.height, int(scale * (f_y + f_h))),  # bottom
                     )
                     face_landmarks = get_face_landmarks(
-                        image_arr, f_rectangle, shape_predictor)
+                        image, image_region, shape_predictor)
                     face_descriptor = get_face_descriptor(
-                        image_arr, face_landmarks, face_recognition_model)
-                    person, is_new, dist = classifier.recognize_person(
-                        face_descriptor)
-
+                        image, face_landmarks, face_recognition_model)
                     labeled_face_landmarks = label_face_landmarks(
                         face_landmarks)
+
+                    face_entity = DetectedFace(
+                        image=image_entity,
+                        image_region=image_region,
+                        descriptor=face_descriptor,
+                        labeled_landmarks=labeled_face_landmarks,
+                        face_score=face.face_score,
+                        joy_score=face.joy_score,
+                    )
+                    with stopwatch('recognize_person'):
+                        person_entity, is_new, dist = classifier.recognize_person(
+                            face_entity)
+
                     yield {
-                        'face_score': face.face_score,
+                        'image_region': image_region,
+                        'labeled_landmarks': face_entity.labeled_landmarks,
+                        'face_score': face_entity.face_score,
+                        'joy_score': face_entity.joy_score,
                         'person': {
-                            'name': person.name,
-                            'uuid': str(person.uuid),
+                            'name': person_entity.name,
+                            'uuid': str(person_entity.id),
                             'is_new': is_new,
                             'dist': dist,
                         },
-                        'face_landmarks': labeled_face_landmarks,
-                        'joy_score': face.joy_score,
-                        'rectangle': f_rectangle,
                     }
 
             data = {
-                'image_uri': image_to_data_uri(image),
-                'faces': list(sensor_data_iter()),
+                'image_uri': image.data_uri,
+                'detected_faces': list(sensor_data_iter()),
             }
 
             if save_annotated_images_to:
@@ -226,8 +274,7 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
                 filename = os.path.expanduser(
                     '{}/{}.jpg'.format(save_annotated_images_to, timestamp))
                 with stopwatch('saving annotated image to {}'.format(filename)):
-                    annotate_image_with_sensor_data(image, data)
-                    save_image(image, filename)
+                    annotate(image_entity).save(filename)
 
             callback(data)
 
@@ -271,12 +318,14 @@ async def face_recognition_task(callback, face_landmarks_model, save_annotated_i
 
         inference = initialize_inference()
 
-        db_filename = os.path.join(os.path.expanduser(DATA_DIR), 'camera.sqlite')
-        os.makedirs(os.path.dirname(db_filename), exist_ok=True)
-        stack.enter_context(db_connection(provider='sqlite', filename=db_filename, create_db=True))
+        with stopwatch('initialize_db'):
+            db_filename = os.path.join(
+                os.path.expanduser(DATA_DIR), 'camera.sqlite')
+            os.makedirs(os.path.dirname(db_filename), exist_ok=True)
+            stack.enter_context(db_connection(
+                provider='sqlite', filename=db_filename, create_db=True))
 
-        with stopwatch('initialize classifier'):
-            classifier = stack.enter_context(Classifier())
+        classifier = Classifier()
 
         for inference_result in inference.run():
             with db_transaction:

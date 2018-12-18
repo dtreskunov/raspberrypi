@@ -3,43 +3,19 @@ import os.path
 import random
 
 import numpy
-import rtree.core
-import rtree.index
 from pony import orm
 
 from .constants import DATA_DIR
-from .entities import Person
+from .entities import DetectedFace, Person, db_transaction
 
 logger = logging.getLogger(__name__)
 
-FACE_DESCRIPTOR_DIMENSIONS = 128
-THRESHOLD = 0.65
+THRESHOLD = 0.6
 
 
 class Classifier:
     def __init__(self):
-        self._initialize_index()
         self._initialize_random_name()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        pass
-
-    @orm.db_session
-    def _initialize_index(self):
-        def generator():
-            for person in Person.select():
-                yield (person.id, person.avg_face_descriptor, None)
-        is_empty = orm.count(c for c in Person) == 0
-        properties = rtree.index.Property()
-        properties.dimension = FACE_DESCRIPTOR_DIMENSIONS
-        if is_empty:
-            self._idx = rtree.index.Index(properties=properties)
-        else:
-            self._idx = rtree.index.Index(
-                generator(), properties=properties)
 
     def _initialize_random_name(self):
         def read_lines(filename):
@@ -51,52 +27,35 @@ class Classifier:
     def _random_name(self):
         return random.choice(self._adjectives).title() + ' ' + random.choice(self._nouns).title()
 
-    def _insert(self, person):
-        self._idx.insert(person.id, person.avg_face_descriptor)
-
-    def _delete(self, person):
-        try:
-            self._idx.delete(person.id, self._idx.bounds)
-        except rtree.core.RTreeError:
-            # raised if index is empty - bounds are inverted in this case
-            pass
-
-    def _update(self, person):
-        self._delete(person)
-        self._insert(person)
-
-    @orm.db_session
-    def recognize_person(self, face_descriptor):
+    @db_transaction
+    def recognize_person(self, new_face: DetectedFace):
         person = None
         is_new = False
         dist = 0.0
 
-        ids = list(self._idx.nearest(face_descriptor, 1))
-        if ids:
-            person = Person[ids[0]]
-            dist = numpy.linalg.norm(
-                numpy.array(person.avg_face_descriptor) - numpy.array(face_descriptor))
-            if dist > THRESHOLD:
-                logger.debug(
-                    'no match found: closest is (name=%s, uuid=%s) with dist=%.2f', person.name, person.uuid, dist)
-                person = None
-            else:
-                logger.debug(
-                    'match found: (name=%s, uuid=%s) is within dist=%.2f: ', person.name, person.uuid, dist)
-                person.avg_face_descriptor = numpy.average(
-                    [person.avg_face_descriptor, face_descriptor],
-                    weights=[person.n_samples, 1],
-                    axis=0).tolist()
-                person.n_samples += 1
-                self._update(person)
-        if not person:
-            person = Person(
-                avg_face_descriptor=face_descriptor,
-                n_samples=1,
-                name=self._random_name())
-            person.flush()
-            self._insert(person)
+        new_descriptor = numpy.array(new_face.descriptor)
+
+        # Compute distance from new_face to each of previously seen faces.
+        # This is very brute-force - consider using scikit-learn KNN algorithms
+        # if this proves to be slow.
+        # See https://github.com/ageitgey/face_recognition/blob/master/examples/face_recognition_knn.py
+        def generator():
+            for seen_face in DetectedFace.select():
+                dist = numpy.linalg.norm(
+                    numpy.array(seen_face.descriptor) - new_descriptor)
+                yield (seen_face, dist)
+
+        closest_seen_face, dist = sorted(
+            generator(), key=lambda pair: pair[1])[0]
+        if closest_seen_face and dist < THRESHOLD:
+            person = closest_seen_face.person
+            new_face.person = person
+            logger.debug(
+                'match found: (name=%s, id=%s) is within dist=%.2f: ', person.name, person.id, dist)
+        else:
+            person = Person(name=self._random_name())
             is_new = True
-            logger.info('new person (name=%s, uuid=%s) created',
-                        person.name, person.uuid)
+            new_face.person = person
+            logger.info('new person (name=%s, id=%s) created',
+                        person.name, person.id)
         return (person, is_new, dist)
