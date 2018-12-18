@@ -30,6 +30,7 @@ from .classifier import Classifier
 from .constants import DATA_DIR
 from .entities import (DetectedFace, Image, Person, db_connection,
                        db_transaction)
+from .preview import Preview
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
@@ -97,40 +98,6 @@ async def face_recognition_task(callback, *,
             with open(file, 'wb') as fp:
                 fp.write(self.bytes)
             logger.debug('saved %s', file)
-
-    class Preview:
-        'wrapper around aiy.vision.annotator.Annotator providing access to underlying PIL.ImageDraw'
-
-        def __init__(self, camera):
-            self._camera = camera
-            self._annotator = None
-            self._draw = None
-
-        def __enter__(self):
-            self._camera.start_preview()
-            self._annotator = aiy.vision.annotator.Annotator(
-                camera, bg_color=(0, 0, 0, 0))
-            self._draw = self._annotator._draw
-            return self
-
-        def __exit__(self, *args, **kwds):
-            self._camera.remove_overlay(self._annotator._overlay)
-            self._annotator = None
-            self._draw = None
-            self._camera.stop_preview()
-
-        @property
-        def draw(self):
-            ':return PIL.ImageDraw if running'
-            return self._draw
-
-        def update(self):
-            if self._annotator:
-                self._annotator.update()
-
-        def clear(self):
-            if self._annotator:
-                self._annotator.clear()
 
     def get_scale(inference_result, image):
         res_h, res_w = inference_result.height, inference_result.width
