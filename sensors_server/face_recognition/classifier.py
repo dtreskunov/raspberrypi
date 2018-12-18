@@ -41,13 +41,15 @@ class Classifier:
         # See https://github.com/ageitgey/face_recognition/blob/master/examples/face_recognition_knn.py
         def generator():
             for seen_face in DetectedFace.select():
+                if seen_face == new_face:
+                    continue
                 dist = numpy.linalg.norm(
                     numpy.array(seen_face.descriptor) - new_descriptor)
                 yield (seen_face, dist)
 
         closest_seen_face, dist = sorted(
             generator(), key=lambda pair: pair[1])[0]
-        if closest_seen_face and dist < THRESHOLD:
+        if closest_seen_face and dist < THRESHOLD and closest_seen_face.person is not None:
             person = closest_seen_face.person
             new_face.person = person
             logger.debug(
