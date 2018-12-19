@@ -7,7 +7,7 @@ import os.path
 import numpy
 import PIL.Image
 
-import picamera
+import picamera.array
 from util.stopwatch import make_stopwatch
 
 JPEG_QUALITY = 75
@@ -17,7 +17,7 @@ stopwatch = make_stopwatch(logger)
 
 class MyImage():
     'Provides efficient conversion between bytes, numpy.array, and PIL.Image representations'
-    
+
     @staticmethod
     def capture(camera, **kwds):
         'Captures camera images directly into a numpy.array'
