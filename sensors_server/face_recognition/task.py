@@ -150,11 +150,11 @@ async def face_recognition_task(callback, *,
         for _, points in face.labeled_landmarks.items():
             draw.line(points, fill='red', width=1)
 
-    def annotate(image: Image):
+    def annotate(image_entity: Image):
         ':return PIL.Image: annotated copy of image'
-        image = MyImage(_bytes=image.data).pil_image
+        image = MyImage(_bytes=image_entity.data).pil_image
         draw = PIL.ImageDraw.Draw(image)
-        for face in image.detected_faces:
+        for face in image_entity.detected_faces:
             draw_face(draw, face)
         return image
 
