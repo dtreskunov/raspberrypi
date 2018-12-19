@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import bz2
 import contextlib
 import glob
@@ -11,15 +10,12 @@ import sys
 import time
 import urllib.request
 
-import numpy
-import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
 
 import aiy.vision.annotator
 import dlib
 import picamera
-import picamera.array
 from aiy.leds import Color, Leds, Pattern, PrivacyLed
 from aiy.vision.inference import (CameraInference, InferenceEngine,
                                   InferenceException)
@@ -28,8 +24,9 @@ from util.stopwatch import make_stopwatch
 
 from .classifier import Classifier
 from .constants import DATA_DIR
-from .entities import (DetectedFace, Image, Person, db_connection,
-                       db_rollback, db_transaction)
+from .entities import (DetectedFace, Image, Person, db_connection, db_rollback,
+                       db_transaction)
+from .image import MyImage
 from .preview import Preview
 
 logger = logging.getLogger(__name__)
@@ -37,7 +34,6 @@ stopwatch = make_stopwatch(logger)
 
 INFERENCE_RESOLUTION = (1640, 1232)
 CAPTURE_RESOLUTION = (820, 616)
-JPEG_QUALITY = 75
 FONT_FILE = '/usr/share/fonts/truetype/freefont/FreeSans.ttf'
 FONT = PIL.ImageFont.truetype(FONT_FILE, size=15)
 
@@ -49,57 +45,6 @@ async def face_recognition_task(callback, *,
                                 skip_recognition=False,
                                 rollback_transactions=False):
     logger.info('starting face_recognition_task')
-
-    class MyImage():
-        @staticmethod
-        def capture(camera, **kwds):
-            with stopwatch('MyImage.capture'):
-                stream = io.BytesIO()
-                camera.capture(stream, **kwds)
-                return MyImage(stream.getvalue())
-
-        def __init__(self, _bytes):
-            self._bytes = _bytes
-            self._pil_image = None
-            self._numpy_array = None
-
-        @property
-        def bytes(self):
-            return self._bytes
-
-        @property
-        def width(self):
-            return self.pil_image.width
-
-        @property
-        def height(self):
-            return self.pil_image.height
-
-        @property
-        def pil_image(self):
-            if self._pil_image is None:
-                with stopwatch('PIL.Image.open'):
-                    stream = io.BytesIO(self._bytes)
-                    self._pil_image = PIL.Image.open(stream)
-            return self._pil_image
-
-        @property
-        def numpy_array(self):
-            if self._numpy_array is None:
-                with stopwatch('numpy.array'):
-                    self._numpy_array = numpy.array(self.pil_image)
-            return self._numpy_array
-
-        @property
-        def data_uri(self):
-            return 'data:image/jpeg;base64,{}'.format(
-                base64.b64encode(self.bytes).decode())
-
-        def save(self, file):
-            os.makedirs(os.path.dirname(file), exist_ok=True)
-            with open(file, 'wb') as fp:
-                fp.write(self.bytes)
-            logger.debug('saved %s', file)
 
     def get_scale(inference_result, image):
         res_h, res_w = inference_result.height, inference_result.width
@@ -207,7 +152,7 @@ async def face_recognition_task(callback, *,
 
     def annotate(image: Image):
         ':return PIL.Image: annotated copy of image'
-        image = MyImage(image.data).pil_image
+        image = MyImage(_bytes=image.data).pil_image
         draw = PIL.ImageDraw.Draw(image)
         for face in image.detected_faces:
             draw_face(draw, face)
@@ -225,7 +170,7 @@ async def face_recognition_task(callback, *,
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
             image = MyImage.capture(
-                camera, format='jpeg', quality=JPEG_QUALITY, use_video_port=True)
+                camera, use_video_port=True)
             image_entity = Image(
                 mime_type='image/jpeg',
                 data=image.bytes,
