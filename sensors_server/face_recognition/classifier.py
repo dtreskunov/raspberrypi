@@ -39,6 +39,7 @@ def _create_default_model():
 @contextlib.contextmanager
 def pickled_classifier(pickle_file, create_default_model=_create_default_model):
     pickle_file = os.path.expanduser(pickle_file)
+    classifier = None
     try:
         classifier = _unpickle(pickle_file)
     except Exception as e:
