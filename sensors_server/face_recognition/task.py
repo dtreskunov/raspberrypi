@@ -217,15 +217,23 @@ async def face_recognition_task(callback, *,
                             image, face_landmarks, face_recognition_model)
 
                         def fit_classifier():
-                            classifier.fit(get_descriptor_person_id_pairs())
+                            descriptor_person_id_pairs = get_descriptor_person_id_pairs()
+                            if descriptor_person_id_pairs:
+                                classifier.fit(descriptor_person_id_pairs)
 
                         @util.retry(fit_classifier, NotFittedError)
                         def recognize_person(face_descriptor):
-                            return classifier.recognize_person(
-                                face_descriptor)
+                            return classifier.recognize_person(face_descriptor)
 
                         with stopwatch('recognize_person'):
-                            person_id, dist = recognize_person(face_descriptor)
+                            try:
+                                person_id, dist = recognize_person(
+                                    face_descriptor)
+                            except NotFittedError:
+                                logger.info(
+                                    'Classifier not fitted, unable to recognize any faces')
+                                person_id, dist = None, None
+
                         if person_id:
                             person_entity = Person[person_id]
                             # save Person and DetectedFace to database to give classifier more training data
