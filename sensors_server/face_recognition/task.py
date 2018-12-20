@@ -16,21 +16,21 @@ import PIL.ImageFont
 import aiy.vision.annotator
 import dlib
 import picamera
+import util
 from aiy.leds import Color, Leds, Pattern, PrivacyLed
 from aiy.vision.inference import (CameraInference, InferenceEngine,
                                   InferenceException)
 from aiy.vision.models import face_detection
-from util.stopwatch import make_stopwatch
 
-from .classifier import pickled_classifier
+from .classifier import pickled_classifier, NotFittedError
 from .constants import DATA_DIR
 from .entities import (DetectedFace, Image, Person, db_connection, db_rollback,
-                       db_transaction)
+                       db_transaction, get_descriptor_person_id_pairs)
 from .image import MyImage
 from .preview import Preview
 
 logger = logging.getLogger(__name__)
-stopwatch = make_stopwatch(logger)
+stopwatch = util.make_stopwatch(logger)
 
 INFERENCE_RESOLUTION = (1640, 1232)
 CAPTURE_RESOLUTION = (820, 616)
@@ -128,17 +128,21 @@ async def face_recognition_task(callback, *,
                 'unable to label face landmarks - unrecognized model %s', face_landmarks_model)
             return {}
 
-    def draw_face(draw, face: DetectedFace):
+    def draw_face_data(draw, face_data: dict):
         def draw_rectangle(x0, y0, x1, y1, border, fill=None, outline=None):
             assert border % 2 == 1
             for i in range(-border // 2, border // 2 + 1):
                 draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
                                fill=fill, outline=outline)
 
-        left, top, right, bottom = face.image_region
-        name = face.person.name if face.person else 'N/A'
-        text = '%s (joy: %.2f)' % (
-            name, face.joy_score)
+        left, top, right, bottom = face_data['image_region']
+        person_data = face_data['person']
+        if person_data:
+            text = '%s (dist: %.2f)' % (
+                person_data['name'], person_data['dist'])
+        else:
+            text = 'Unrecognized'
+
         _, text_height = FONT.getsize(text)
         margin = 3
         text_bottom = bottom + margin + text_height + margin
@@ -147,43 +151,45 @@ async def face_recognition_task(callback, *,
                        text_bottom, 3, fill='white', outline='white')
         draw.text((left + 1 + margin, bottom + 1 + margin),
                   text, font=FONT, fill='black')
-        for _, points in face.labeled_landmarks.items():
+        for _, points in face_data['labeled_landmarks'].items():
             draw.line(points, fill='red', width=1)
 
-    def annotate(image_entity: Image):
-        ':return PIL.Image: annotated copy of image'
-        image = MyImage(_bytes=image_entity.data).pil_image
+    def annotate(image: PIL.Image, data: dict):
+        ':return annotated copy of PIL.Image'
         draw = PIL.ImageDraw.Draw(image)
-        for face in image_entity.detected_faces:
-            draw_face(draw, face)
+        for face_data in data['detected_faces']:
+            draw_face_data(draw, face_data)
         return image
 
     def process_inference_result(inference_result, camera, shape_predictor, face_recognition_model, classifier, preview):
-        faces = face_detection.get_faces(inference_result)
-        if not faces:
+        aiy_faces = face_detection.get_faces(inference_result)
+        if not aiy_faces:
             if preview:
                 preview.clear()
                 preview.update()
             return
 
-        with stopwatch('process_inference_result for {} face(s)'.format(len(faces))):
+        with stopwatch('process_inference_result for {} face(s)'.format(len(aiy_faces))):
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
             image = MyImage.capture(
                 camera, use_video_port=True)
-            image_entity = Image(
-                mime_type='image/jpeg',
-                data=image.bytes,
-                width=image.width,
-                height=image.height
-            )
+
+            @util.lazy_getter
+            def get_image_entity():
+                return Image(
+                    mime_type='image/jpeg',
+                    data=image.bytes,
+                    width=image.width,
+                    height=image.height
+                )
 
             scale = get_scale(inference_result, image)
 
             def sensor_data_iter():
-                for face in faces:
+                for aiy_face in aiy_faces:
                     # translate inference result into image coordinates
-                    f_x, f_y, f_w, f_h = face.bounding_box
+                    f_x, f_y, f_w, f_h = aiy_face.bounding_box
                     adjust_factor = 0.9  # seems to improve face_landmarks
                     w = f_w * adjust_factor
                     h = f_h * adjust_factor
@@ -197,36 +203,55 @@ async def face_recognition_task(callback, *,
                     )
                     face_landmarks = get_face_landmarks(
                         image, image_region, shape_predictor)
-                    face_descriptor = get_face_descriptor(
-                        image, face_landmarks, face_recognition_model) if not skip_recognition else None
                     labeled_face_landmarks = label_face_landmarks(
                         face_landmarks)
 
-                    face_entity = DetectedFace(
-                        image=image_entity,
-                        image_region=image_region,
-                        descriptor=face_descriptor,
-                        labeled_landmarks=labeled_face_landmarks,
-                        face_score=face.face_score,
-                        joy_score=face.joy_score,
-                    )
                     result = {
                         'image_region': image_region,
-                        'labeled_landmarks': face_entity.labeled_landmarks,
-                        'face_score': face_entity.face_score,
-                        'joy_score': face_entity.joy_score,
+                        'labeled_landmarks': labeled_face_landmarks,
+                        'face_score': aiy_face.face_score,
+                        'joy_score': aiy_face.joy_score,
                     }
                     if not skip_recognition:
+                        face_descriptor = get_face_descriptor(
+                            image, face_landmarks, face_recognition_model)
+
+                        def fit_classifier():
+                            classifier.fit(get_descriptor_person_id_pairs())
+
+                        @util.retry(fit_classifier, NotFittedError)
+                        def recognize_person(face_descriptor):
+                            return classifier.recognize_person(
+                                face_descriptor)
+
                         with stopwatch('recognize_person'):
-                            person_entity = classifier.recognize_person(
-                                face_entity)
-                            if person_entity:
-                                result['person'] = {
-                                    'name': person_entity.name,
-                                    'uuid': str(person_entity.id),
-                                }
-                            else:
-                                result['person'] = None
+                            person_id, dist = recognize_person(face_descriptor)
+                        if person_id:
+                            person_entity = Person[person_id]
+                            # save Person and DetectedFace to database to give classifier more training data
+                            DetectedFace(
+                                person=person_entity,
+                                descriptor=face_descriptor,
+                                labeled_landmarks=labeled_face_landmarks,
+                                face_score=aiy_face.face_score,
+                                joy_score=aiy_face.joy_score,
+                            )
+                            result['person'] = {
+                                'name': person_entity.name,
+                                'uuid': str(person_entity.id),
+                                'dist': dist
+                            }
+                        else:
+                            # save Image and DetectedFace to database for manual identification
+                            DetectedFace(
+                                image=get_image_entity(),
+                                image_region=image_region,
+                                descriptor=face_descriptor,
+                                labeled_landmarks=labeled_face_landmarks,
+                                face_score=aiy_face.face_score,
+                                joy_score=aiy_face.joy_score,
+                            )
+                            result['person'] = None
                     yield result
 
             data = {
@@ -239,12 +264,12 @@ async def face_recognition_task(callback, *,
                 filename = os.path.expanduser(
                     '{}/{}.jpg'.format(save_annotated_images_to, timestamp))
                 with stopwatch('saving annotated image to {}'.format(filename)):
-                    annotate(image_entity).save(filename)
+                    annotate(image.pil_image, data).save(filename)
 
             if preview:
                 preview.clear()
-                for face in image_entity.detected_faces:
-                    draw_face(preview.draw, face)
+                for face_data in data['detected_faces']:
+                    draw_face_data(preview.draw, face_data)
                 preview.update()
 
             callback(data)
@@ -257,6 +282,12 @@ async def face_recognition_task(callback, *,
 
     with contextlib.ExitStack() as stack:
 
+        def reset_inference_engine():
+            logger.info('attempting to reset InferenceEngine')
+            with InferenceEngine() as engine:
+                engine.reset()
+
+        @util.retry(reset_inference_engine, InferenceException)
         def initialize_inference():
             '''
             One time, the process died without stopping inference, which
@@ -265,17 +296,8 @@ async def face_recognition_task(callback, *,
             the InferenceEngine.
             '''
             with stopwatch('initialize_inference'):
-                for _ in range(2):
-                    try:
-                        return stack.enter_context(
-                            CameraInference(face_detection.model()))
-                    except InferenceException as e:
-                        logger.info(
-                            'attempting to reset InferenceEngine due to: %s', e)
-                        with InferenceEngine() as engine:
-                            engine.reset()
-                else:
-                    raise Exception('unable to start CameraInference')
+                return stack.enter_context(
+                    CameraInference(face_detection.model()))
 
         # Forced sensor mode, 1640x1232, full FoV. See:
         # https://picamera.readthedocs.io/en/release-1.13/fov.html#sensor-modes

@@ -8,11 +8,11 @@ import numpy
 import PIL.Image
 
 import picamera.array
-from util.stopwatch import make_stopwatch
+import util
 
 JPEG_QUALITY = 75
 logger = logging.getLogger(__name__)
-stopwatch = make_stopwatch(logger)
+stopwatch = util.make_stopwatch(logger)
 
 
 class MyImage():

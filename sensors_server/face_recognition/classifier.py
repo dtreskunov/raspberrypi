@@ -13,8 +13,6 @@ import sklearn.preprocessing
 from pony import orm
 
 from .constants import DATA_DIR
-from .entities import (DetectedFace, Person, db_transaction,
-                       get_descriptor_person_id_pairs)
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +58,21 @@ def pickled_classifier(pickle_file, create_default_model=_create_default_model):
                 'Unable to pickle classifier to %s due to %s', pickle_file, e)
 
 
+class NotFittedError(RuntimeError):
+    'Exception class to raise if classifier is used before fitting.'
+    pass
+
+
 class Classifier:
     def __init__(self, model, encoder):
         self._model = model
         self._encoder = encoder
 
-    @db_transaction
-    def fit(self):
-        descriptor_person_id_pairs = get_descriptor_person_id_pairs()
-        n = len(descriptor_person_id_pairs)
+    def fit(self, descriptor_person_id_pairs):
+        if not descriptor_person_id_pairs:
+            raise ValueError('No data provided')
 
+        n = len(descriptor_person_id_pairs)
         random.shuffle(descriptor_person_id_pairs)
 
         # 128-dimensional face descriptor vectors
@@ -87,9 +90,6 @@ class Classifier:
 
         X_train = X[train_idx]
         y_train = y[train_idx]
-        if X_train.shape[0] == 0:
-            raise Exception(
-                'Unable to fit model - identify some people first!')
 
         self._model.fit(X_train, y_train)
 
@@ -106,28 +106,19 @@ class Classifier:
                 'No test data - will be unable to calculate model accuracy')
             return
 
-    @db_transaction
-    def recognize_person(self, face: DetectedFace):
+    def recognize_person(self, face_descriptor):
         try:
-            distance = self._model.kneighbors([face.descriptor])[0][0][0]
-            prediction = self._model.predict([face.descriptor])
+            distance = self._model.kneighbors([face_descriptor])[0][0][0]
+            prediction = self._model.predict([face_descriptor])
             person_id = self._encoder.inverse_transform(prediction)[0]
-        except sklearn.exceptions.NotFittedError:
-            try:
-                self.fit()
-            except Exception as e:
-                logger.warning('Unable to fit classifier due to %s', e)
-                return None
-            return self.recognize_person(face)
-
-        person = Person[person_id]
+        except sklearn.exceptions.NotFittedError as e:
+            raise NotFittedError(e)
 
         if distance < THRESHOLD:
             logger.info('%s found at a distance of %.2f (threshold %.2f)',
-                        person, distance, THRESHOLD)
-            face.person = person
-            return person
+                        person_id, distance, THRESHOLD)
+            return person_id, distance
         else:
             logger.info('no match found within threshold of %.2f; nearest neighbor is %s at a distance of %.2f',
-                        person, THRESHOLD, distance)
-            return None
+                        person_id, THRESHOLD, distance)
+            return None, distance
