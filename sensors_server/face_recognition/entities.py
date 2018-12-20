@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import logging
 import uuid as uuid_lib
 
@@ -13,12 +14,16 @@ logger = logging.getLogger(__name__)
 
 class Person(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
+    created_at = orm.Required(
+        datetime.datetime, sql_default='CURRENT_TIMESTAMP')
     name = orm.Required(str)
     detected_faces = orm.Set(lambda: DetectedFace)
 
 
 class Image(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
+    created_at = orm.Required(
+        datetime.datetime, sql_default='CURRENT_TIMESTAMP')
     mime_type = orm.Required(str)
     data = orm.Required(bytes)
     width = orm.Required(int)
@@ -28,6 +33,8 @@ class Image(db.Entity):
 
 class DetectedFace(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
+    created_at = orm.Required(
+        datetime.datetime, sql_default='CURRENT_TIMESTAMP')
     image = orm.Optional(lambda: Image)
     image_region = orm.Required(orm.Json)  # [left, top, right, bottom]
     descriptor = orm.Optional(orm.Json)  # float[128]
