@@ -26,8 +26,7 @@ def retry(remedy_func=None, exceptions=Exception, times=1):
             _times = times
             while True:
                 try:
-                    func(*args, **kwargs)
-                    return
+                    return func(*args, **kwargs)
                 except Exception as e:
                     if not _times > 0 or not isinstance(e, exceptions):
                         raise
