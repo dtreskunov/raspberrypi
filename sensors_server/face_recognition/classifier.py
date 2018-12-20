@@ -113,7 +113,12 @@ class Classifier:
             prediction = self._model.predict([face.descriptor])
             person_id = self._encoder.inverse_transform(prediction)[0]
         except sklearn.exceptions.NotFittedError:
-            return None
+            try:
+                self.fit()
+            except Exception as e:
+                logger.warning('Unable to fit classifier due to %s', e)
+                return None
+            return self.recognize_person(face)
 
         person = Person[person_id]
 
