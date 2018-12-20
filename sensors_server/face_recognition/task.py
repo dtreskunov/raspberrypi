@@ -22,7 +22,7 @@ from aiy.vision.inference import (CameraInference, InferenceEngine,
 from aiy.vision.models import face_detection
 from util.stopwatch import make_stopwatch
 
-from .classifier import Classifier
+from .classifier import pickled_classifier
 from .constants import DATA_DIR
 from .entities import (DetectedFace, Image, Person, db_connection, db_rollback,
                        db_transaction)
@@ -184,7 +184,7 @@ async def face_recognition_task(callback, *,
                 for face in faces:
                     # translate inference result into image coordinates
                     f_x, f_y, f_w, f_h = face.bounding_box
-                    adjust_factor = 0.9 # seems to improve face_landmarks
+                    adjust_factor = 0.9  # seems to improve face_landmarks
                     w = f_w * adjust_factor
                     h = f_h * adjust_factor
                     x = f_x + (f_w - w)/2
@@ -218,15 +218,15 @@ async def face_recognition_task(callback, *,
                     }
                     if not skip_recognition:
                         with stopwatch('recognize_person'):
-                            person_entity, is_new, dist = classifier.recognize_person(
+                            person_entity = classifier.recognize_person(
                                 face_entity)
-                            result['person'] = {
-                                'name': person_entity.name,
-                                'uuid': str(person_entity.id),
-                                'is_new': is_new,
-                                'dist': dist,
-                            }
-
+                            if person_entity:
+                                result['person'] = {
+                                    'name': person_entity.name,
+                                    'uuid': str(person_entity.id),
+                                }
+                            else:
+                                result['person'] = None
                     yield result
 
             data = {
@@ -293,7 +293,8 @@ async def face_recognition_task(callback, *,
             stack.enter_context(db_connection(
                 provider='sqlite', filename=db_filename, create_db=True))
 
-        classifier = Classifier()
+        classifier = stack.enter_context(pickled_classifier(
+            os.path.join(DATA_DIR, 'classifier.pickle')))
 
         leds = stack.enter_context(Leds())
         stack.enter_context(PrivacyLed(leds))

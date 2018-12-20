@@ -44,6 +44,10 @@ class DetectedFace(db.Entity):
     person = orm.Optional(lambda: Person)
 
 
+def get_descriptor_person_id_pairs():
+    return orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:]
+
+
 @contextlib.contextmanager
 def db_connection(*args, **kwds):
     with orm.sql_debugging(debug=(logger.getEffectiveLevel() == logging.DEBUG)):
