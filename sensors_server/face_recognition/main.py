@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# TODO: unable to run as script: ValueError: Attempted relative import in non-package
+# WORKAROUND: run as `python3 -m face_recognition.main -h` from root Python directory
+
 import argparse
 import contextlib
 import logging

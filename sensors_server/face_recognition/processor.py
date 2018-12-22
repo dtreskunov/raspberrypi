@@ -167,70 +167,56 @@ class LandmarkProcessor(Processor):
     def __init__(self, _dlib: DlibWrapper):
         self._dlib = _dlib
 
-    def _attrs(self, image: MyImage, face: Face):
-        raw_landmarks = self._dlib.get_face_landmarks(
+    def _process(self, image: MyImage, face: Face):
+        face.raw_landmarks = self._dlib.get_face_landmarks(
             image, face.image_region)
-        labeled_landmarks = self._dlib.label_face_landmarks(raw_landmarks)
-        return {
-            'raw_landmarks': raw_landmarks,
-            'labeled_landmarks': labeled_landmarks}
+        face.labeled_landmarks = self._dlib.label_face_landmarks(face.raw_landmarks)
 
     def process(self, data: InputOutput):
-        if not data or not data.faces:
+        if not data:
             return
-        updated_faces = [
-            face._replace(**self._attrs(data.image, face))
-            for face in data.faces
-        ]
-        return data._replace(faces=updated_faces)
+        for face in data.faces:
+            self._process(data.image, face)
 
 
 class DescriptorProcessor(Processor):
     def __init__(self, _dlib: DlibWrapper):
         self._dlib = _dlib
 
-    def _attrs(self, image: MyImage, face: Face):
+    def _process(self, image: MyImage, face: Face):
         if not face.raw_landmarks:
             logger.warning(
                 'raw_landmarks not present - ensure that LandmarkProcessor ' +
                 'is configured before DescriptorProcessor')
-            return {}
-        return {'descriptor': self._dlib.get_face_descriptor(
-                image, face.raw_landmarks)}
+            return
+        face.descriptor = self._dlib.get_face_descriptor(image, face.raw_landmarks)
 
     def process(self, data: InputOutput):
-        if not data or not data.faces:
+        if not data:
             return
-        updated_faces = [
-            face._replace(**self._attrs(data.image, face))
-            for face in data.faces
-        ]
-        return data._replace(faces=updated_faces)
+        for face in data.faces:
+            self._process(data.image, face)
 
 
 class ClassifierProcessor(Processor):
     def __init__(self, classifier):
         self._classifier = classifier
 
-    def _attrs(self, face: Face):
+    def _process(self, face: Face):
         if not face.descriptor:
             logger.warning(
                 'descriptor not present - ensure that DescriptorProcessor ' +
                 'is configured before ClassifierProcessor')
-            return {}
+            return
         try:
             person_id, dist = self._classifier.recognize_person(face.descriptor)
+            face.person = Person(id=person_id, dist=dist)
         except NotFittedError:
             logger.warning(
                 'Classifier not fitted yet, unable to recognize any faces!')
-            return {}
-        return {'person': Person(id=person_id, dist=dist)}
 
     def process(self, data: InputOutput):
-        if not data or not data.faces:
+        if not data:
             return
-        updated_faces = [
-            face._replace(**self._attrs(face))
-            for face in data.faces
-        ]
-        return data._replace(faces=updated_faces)
+        for face in data.faces:
+            self._process(face)
