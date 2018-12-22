@@ -31,10 +31,9 @@ def draw_face(draw: PIL.ImageDraw, face: Face):
                            fill=fill, outline=outline)
 
     left, top, right, bottom = face.image_region
-    person_data: Person = face.person
-    if person_data:
+    if face.person:
         text = '%s (dist: %.2f)' % (
-            person_data.name, person_data.dist)
+            face.person.name, face.person.dist)
     else:
         text = 'Unrecognized'
 
