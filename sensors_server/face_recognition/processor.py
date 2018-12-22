@@ -30,7 +30,11 @@ def draw_face(draw: PIL.ImageDraw, face: Face):
             draw.rectangle((x0 + i, y0 + i, x1 - i, y1 - i),
                            fill=fill, outline=outline)
 
-    left, top, right, bottom = face.image_region
+    left = face.image_region.left
+    top = face.image_region.top
+    right = face.image_region.right
+    bottom = face.image_region.bottom
+    
     if face.person:
         text = '%s (dist: %.2f)' % (
             face.person.name, face.person.dist)
