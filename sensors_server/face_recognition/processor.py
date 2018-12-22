@@ -82,7 +82,7 @@ class ProcessorChain(Processor):
     def __init__(self, *processors: Sequence[Processor]):
         self._processors = list(processors)
         self._exit_stack = contextlib.ExitStack()
-    
+
     def __enter__(self):
         for processor in self._processors:
             self._exit_stack.enter_context(processor)
@@ -97,57 +97,6 @@ class ProcessorChain(Processor):
             if not result:
                 result = data
         return result
-
-
-class SkipIfBusyProcessor(Processor):
-    def __init__(self, wrapped: Processor):
-        self._wrapped = wrapped
-        self._thread = threading.Thread(target=self._run, daemon=False)
-        self._input = queue.Queue(maxsize=1)
-        self._output = queue.Queue(maxsize=1)
-        self._should_stop = threading.Event()
-
-    def __enter__(self):
-        self._thread.start()
-        return self
-
-    def __exit__(self, exc_type, exc_info, exc_tb):
-        self._should_stop.set()
-        logger.info('waiting for thread to join')
-        self._thread.join()
-        logger.info('thread joined')
-
-    def process(self, data: InputOutput):
-        try:
-            self._input.put_nowait(data)
-        except queue.Full:
-            self._check_thread()
-            logger.info('queue full, skipping processor (as intended)')
-            return
-        logger.info('waiting for output')
-        try:
-            return self._output.get(10)
-        except queue.Empty:
-            self._check_thread()
-            logger.info('timed out waiting for output')
-
-    def _check_thread(self):
-        if not self._thread.is_alive():
-            raise RuntimeError('thread is not alive')
-
-    def _run(self):
-        while True:
-            if self._should_stop.is_set():
-                logger.info('_should_stop is set, returning from thread')
-                return
-            try:
-                data = self._input.get(timeout=0.5)
-            except queue.Empty:
-                continue
-            try:
-                self._output.put(self._wrapped.process(data), timeout=10)
-            except queue.Full:
-                logger.info('output queue full, dropping results')
 
 
 class PreviewProcessor(Preview, Processor):
@@ -177,7 +126,8 @@ class LandmarkProcessor(Processor):
     def _process(self, image: MyImage, face: Face):
         face.raw_landmarks = self._dlib.get_face_landmarks(
             image, face.image_region)
-        face.labeled_landmarks = self._dlib.label_face_landmarks(face.raw_landmarks)
+        face.labeled_landmarks = self._dlib.label_face_landmarks(
+            face.raw_landmarks)
 
     def process(self, data: InputOutput):
         if not data:
@@ -196,7 +146,8 @@ class DescriptorProcessor(Processor):
                 'raw_landmarks not present - ensure that LandmarkProcessor ' +
                 'is configured before DescriptorProcessor')
             return
-        face.descriptor = self._dlib.get_face_descriptor(image, face.raw_landmarks)
+        face.descriptor = self._dlib.get_face_descriptor(
+            image, face.raw_landmarks)
 
     def process(self, data: InputOutput):
         if not data:
@@ -216,7 +167,8 @@ class ClassifierProcessor(Processor):
                 'is configured before ClassifierProcessor')
             return
         try:
-            person_id, dist = self._classifier.recognize_person(face.descriptor)
+            person_id, dist = self._classifier.recognize_person(
+                face.descriptor)
             face.person = Person(id=person_id, dist=dist)
         except NotFittedError:
             logger.warning(
