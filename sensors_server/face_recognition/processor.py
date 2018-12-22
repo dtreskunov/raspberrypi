@@ -34,7 +34,7 @@ def draw_face(draw: PIL.ImageDraw, face: Face):
     top = face.image_region.top
     right = face.image_region.right
     bottom = face.image_region.bottom
-    
+
     if face.person:
         text = '%s (dist: %.2f)' % (
             face.person.name, face.person.dist)
@@ -49,8 +49,9 @@ def draw_face(draw: PIL.ImageDraw, face: Face):
                    text_bottom, 3, fill='white', outline='white')
     draw.text((left + 1 + margin, bottom + 1 + margin),
               text, font=FONT, fill='black')
-    for _, points in face.labeled_landmarks.items():
-        draw.line(points, fill='red', width=1)
+    if face.labeled_landmarks:
+        for _, points in face.labeled_landmarks.items():
+            draw.line(points, fill='red', width=1)
 
 
 def annotate(image: PIL.Image, data: InputOutput) -> PIL.Image:
