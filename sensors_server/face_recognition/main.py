@@ -7,11 +7,16 @@ import argparse
 import contextlib
 import logging
 
+from util import make_stopwatch
+
 from .dlib_wrapper import DlibWrapper
 from .picamera_input import PiCameraInput
 from .preview import Preview
-from .processor import LandmarkProcessor, PreviewProcessor, ProcessorChain
+from .processor import (DescriptorProcessor, LandmarkProcessor,
+                        PreviewProcessor, ProcessorChain)
 
+logger = logging.getLogger(__name__)
+stopwatch = make_stopwatch(logger)
 
 def main(args):
     with contextlib.ExitStack() as exit_stack:
@@ -21,13 +26,18 @@ def main(args):
             processors.append(
                 LandmarkProcessor(
                     DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
+        if args.descriptor:
+            processors.append(
+                DescriptorProcessor(
+                    DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
         if args.preview:
             processors.append(
                 PreviewProcessor(camera=pi_camera_input.camera))
 
         processor_chain = exit_stack.enter_context(ProcessorChain(*processors))
         for data in pi_camera_input.iterator():
-            processor_chain.process(data)
+            with stopwatch('processor chain'):
+                logger.info(processor_chain.process(data))
 
 
 if __name__ == '__main__':
@@ -45,6 +55,8 @@ if __name__ == '__main__':
         default='shape_predictor_68_face_landmarks.dat')
     parser.add_argument(
         '--landmarks', help='extract facial landmarks', action='store_true', default=True)
+    parser.add_argument(
+        '--descriptor', help='extract facial descriptor (slow, but needed for recognition)', action='store_true', default=True)
     parser.add_argument(
         '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
 
