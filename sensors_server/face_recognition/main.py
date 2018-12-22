@@ -11,18 +11,28 @@ from util import make_stopwatch
 
 from .classifier import pickled_classifier
 from .dlib_wrapper import DlibWrapper
+from .model_types import Person
 from .picamera_input import PiCameraInput
 from .preview import Preview
-from .processor import (ClassifierProcessor, DescriptorProcessor, LandmarkProcessor,
-                        PreviewProcessor, ProcessorChain)
+from .processor import (ClassifierProcessor, DescriptorProcessor,
+                        LandmarkProcessor, PreviewProcessor, ProcessorChain)
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
 
+
+def lookup_person(name):
+    # TODO: hook up to the database
+    return Person(id=name, name=name)
+
+
 def main(args):
+    if args.name:
     with contextlib.ExitStack() as exit_stack:
         processors = []
-        pi_camera_input = exit_stack.enter_context(PiCameraInput())
+
+        person = lookup_person(args.name) if args.name else None
+        pi_camera_input = exit_stack.enter_context(PiCameraInput(person))
         if args.landmarks:
             processors.append(
                 LandmarkProcessor(
@@ -68,6 +78,8 @@ if __name__ == '__main__':
         '--classifier-data', help='use specified file as classifier storage (implies --descriptor)',
         default='~/.face_recognition/classifier.pickle')
     parser.add_argument(
+        '--name', help='name of the person appearing in the input stream (used for training)')
+    parser.add_argument(
         '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
 
     args = parser.parse_args()
@@ -77,7 +89,7 @@ if __name__ == '__main__':
         ptvsd.enable_attach(address=address)
         print('Waiting for debugger on {}...'.format(address))
         ptvsd.wait_for_attach()
-    
+
     if args.classifier_data and not args.descriptor:
         print('--descriptor implied')
         args.descriptor = True

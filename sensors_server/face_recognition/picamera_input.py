@@ -63,10 +63,11 @@ def _get_image_region(aiy_bounding_box: tuple, inference: Size, image: Size) -> 
     )
 
 class PiCameraInput:
-    def __init__(self):
+    def __init__(self, person = None):
         self._stack = contextlib.ExitStack()
         self._camera = None
         self._inference = None
+        self._person = person
     
     @property
     def camera(self):
@@ -117,6 +118,7 @@ class PiCameraInput:
                         ),
                         face_score=aiy_face.face_score,
                         joy_score=aiy_face.joy_score,
+                        person=self._person,
                     )
                     for aiy_face in aiy_faces
                 ],
