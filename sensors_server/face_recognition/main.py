@@ -6,6 +6,7 @@
 import argparse
 import contextlib
 import logging
+import warnings
 
 from util import make_stopwatch
 
@@ -98,4 +99,5 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
     logging.captureWarnings(True)
+    warnings.simplefilter('default', DeprecationWarning)
     main(args)
