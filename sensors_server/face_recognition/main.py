@@ -15,7 +15,7 @@ from .processor import LandmarkProcessor, PreviewProcessor, ProcessorChain
 
 def main(args):
     with contextlib.ExitStack() as exit_stack:
-        processors = exit_stack.enter_context(ProcessorChain())
+        processors = []
         pi_camera_input = exit_stack.enter_context(PiCameraInput())
         if args.landmarks:
             processors.append(
@@ -24,8 +24,10 @@ def main(args):
         if args.preview:
             processors.append(
                 PreviewProcessor(camera=pi_camera_input.camera))
+
+        processor_chain = exit_stack.enter_context(ProcessorChain(*processors))
         for data in pi_camera_input.iterator():
-            processors.process(data)
+            processor_chain.process(data)
 
 
 if __name__ == '__main__':

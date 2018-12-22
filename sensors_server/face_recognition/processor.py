@@ -83,9 +83,6 @@ class ProcessorChain(Processor):
         self._processors = list(processors)
         self._exit_stack = contextlib.ExitStack()
     
-    def append(self, processor: Processor):
-        self._processors.append(processor)
-
     def __enter__(self):
         for processor in self._processors:
             self._exit_stack.enter_context(processor)
