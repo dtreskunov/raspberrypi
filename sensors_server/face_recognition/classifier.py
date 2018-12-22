@@ -127,5 +127,5 @@ class Classifier:
             return person_id, distance
         else:
             logger.info('no match found within threshold of %.2f; nearest neighbor is %s at a distance of %.2f',
-                        person_id, THRESHOLD, distance)
+                        THRESHOLD, person_id, distance)
             return None, distance
