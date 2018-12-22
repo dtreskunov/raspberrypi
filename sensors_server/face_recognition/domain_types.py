@@ -17,7 +17,7 @@ class Region:
 
 
 class Person:
-    def __init__(self, id: UUID, dist: float, name: str = None):
+    def __init__(self, id: UUID, dist: float = None, name: str = None):
         self.id = id
         self.dist = dist
         self.name = name
