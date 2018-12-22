@@ -13,7 +13,6 @@ import urllib.request
 import PIL.ImageDraw
 import PIL.ImageFont
 
-import aiy.vision.annotator
 import dlib
 import picamera
 import util
@@ -24,7 +23,7 @@ from aiy.vision.models import face_detection
 
 from .classifier import pickled_classifier, NotFittedError
 from .constants import DATA_DIR
-from .entities import (DetectedFace, Image, Person, db_connection, db_rollback,
+from .database import (DetectedFace, Image, Person, db_connection, db_rollback,
                        db_transaction, get_descriptor_person_id_pairs)
 from .image import MyImage
 from .preview import Preview

@@ -4,3 +4,4 @@ __pycache__
 .debhelper
 src/tests/images/*.jpg
 .vscode/settings.json
+.mypy_cache
