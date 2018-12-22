@@ -23,7 +23,7 @@ stopwatch = make_stopwatch(logger)
 
 def lookup_person(name):
     # TODO: hook up to the database
-    return Person(id=name, name=name)
+    return Person(id=name, name=name, dist=0.0)
 
 
 def main(args):
