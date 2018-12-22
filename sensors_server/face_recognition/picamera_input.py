@@ -96,7 +96,7 @@ class PiCameraInput:
         for inference_result in self._inference.run():
             aiy_faces = face_detection.get_faces(inference_result)
             if not aiy_faces:
-                yield None
+                continue
 
             # inference runs on the vision bonnet, which grabs images from the camera directly
             # we need to capture the image separately on the Raspberry in order to use dlib for face rec
