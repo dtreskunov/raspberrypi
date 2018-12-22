@@ -58,8 +58,8 @@ def _get_image_region(aiy_bounding_box: tuple, inference: Size, image: Size) -> 
     return Region(
         left=max(0, int(scale * x)),
         top=max(0, int(scale * y)),
-        right=min(image.width, int(scale * (x + w))),
-        bottom=min(image.height, int(scale * (y + h)))
+        right=min(image.w, int(scale * (x + w))),
+        bottom=min(image.h, int(scale * (y + h)))
     )
 
 class PiCameraInput:
