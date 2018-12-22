@@ -97,4 +97,5 @@ if __name__ == '__main__':
         args.landmarks = True
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
+    logging.captureWarnings(True)
     main(args)
