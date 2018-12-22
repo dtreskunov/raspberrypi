@@ -103,8 +103,8 @@ class PiCameraInput:
             image = MyImage.capture(self._camera, use_video_port=True)
 
             inference_size = Size(
-                width=inference_result.width, height=inference_result.height)
-            image_size = Size(width=image.width, height=image.height)
+                w=inference_result.width, h=inference_result.height)
+            image_size = Size(w=image.width, h=image.height)
 
             yield InputOutput(
                 image=image,
