@@ -13,7 +13,7 @@ from .dlib_wrapper import DlibWrapper
 from .picamera_input import PiCameraInput
 from .preview import Preview
 from .processor import (DescriptorProcessor, LandmarkProcessor,
-                        PreviewProcessor, ProcessorChain)
+                        PreviewProcessor, ProcessorChain, SkipIfBusyProcessor)
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
@@ -28,8 +28,9 @@ def main(args):
                     DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
         if args.descriptor:
             processors.append(
-                DescriptorProcessor(
-                    DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
+                SkipIfBusyProcessor(
+                    DescriptorProcessor(
+                        DlibWrapper.with_face_landmarks_model(args.face_landmarks_model))))
         if args.preview:
             processors.append(
                 PreviewProcessor(camera=pi_camera_input.camera))
