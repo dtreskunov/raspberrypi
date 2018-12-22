@@ -11,7 +11,7 @@ from util import make_stopwatch
 
 from .classifier import pickled_classifier
 from .dlib_wrapper import DlibWrapper
-from .model_types import Person
+from .domain_types import Person
 from .picamera_input import PiCameraInput
 from .preview import Preview
 from .processor import (ClassifierProcessor, DescriptorProcessor,
