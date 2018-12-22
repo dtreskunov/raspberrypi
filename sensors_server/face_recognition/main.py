@@ -53,7 +53,9 @@ def main(args):
         processor_chain = exit_stack.enter_context(ProcessorChain(*processors))
         for data in pi_camera_input.iterator():
             with stopwatch('processor chain'):
-                logger.info(processor_chain.process(data))
+                data = processor_chain.process(data)
+                if data:
+                    logger.info(data)
 
 
 if __name__ == '__main__':
