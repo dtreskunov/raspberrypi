@@ -85,6 +85,7 @@ class PiCameraInput:
 
         leds = self._stack.enter_context(Leds())
         self._stack.enter_context(PrivacyLed(leds))
+        return self
     
     def __exit__(self, *args, **kwargs):
         self._stack.close()

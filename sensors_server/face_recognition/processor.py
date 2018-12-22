@@ -80,6 +80,7 @@ class ProcessorChain(Processor):
     def __enter__(self):
         for processor in self._processors:
             self._exit_stack.enter_context(processor)
+        return self
 
     def __exit__(self, exc_type, exc_info, exc_tb):
         self._exit_stack.close()
