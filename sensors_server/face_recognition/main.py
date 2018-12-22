@@ -9,10 +9,11 @@ import logging
 
 from util import make_stopwatch
 
+from .classifier import pickled_classifier
 from .dlib_wrapper import DlibWrapper
 from .picamera_input import PiCameraInput
 from .preview import Preview
-from .processor import (DescriptorProcessor, LandmarkProcessor,
+from .processor import (ClassifierProcessor, DescriptorProcessor, LandmarkProcessor,
                         PreviewProcessor, ProcessorChain)
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,11 @@ def main(args):
             processors.append(
                 DescriptorProcessor(
                     DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
+        if args.classifier_data:
+            processors.append(
+                ClassifierProcessor(
+                    exit_stack.enter_context(pickled_classifier(args.classifier_data))))
+
         if args.preview:
             processors.append(
                 PreviewProcessor(camera=pi_camera_input.camera))
@@ -56,7 +62,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '--landmarks', help='extract facial landmarks', action='store_true', default=True)
     parser.add_argument(
-        '--descriptor', help='extract facial descriptor (slow, but needed for recognition)', action='store_true', default=True)
+        '--descriptor', help='extract facial descriptor (slow, but needed for recognition) (implies --landmarks)',
+        action='store_true', default=True)
+    parser.add_argument(
+        '--classifier-data', help='use specified file as classifier storage (implies --descriptor)',
+        default='~/.face_recognition/classifier.pickle')
     parser.add_argument(
         '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
 
@@ -67,6 +77,13 @@ if __name__ == '__main__':
         ptvsd.enable_attach(address=address)
         print('Waiting for debugger on {}...'.format(address))
         ptvsd.wait_for_attach()
+    
+    if args.classifier_data and not args.descriptor:
+        print('--descriptor implied')
+        args.descriptor = True
+    if args.descriptor and not args.landmarks:
+        print('--landmarks implied')
+        args.landmarks = True
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
     main(args)

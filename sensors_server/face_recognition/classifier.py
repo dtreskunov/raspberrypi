@@ -68,6 +68,7 @@ class Classifier:
     def __init__(self, model, encoder):
         self._model = model
         self._encoder = encoder
+        self._person_count = 0
 
     def fit(self, descriptor_person_id_pairs):
         if not descriptor_person_id_pairs:
@@ -93,6 +94,7 @@ class Classifier:
         y_train = y[train_idx]
 
         self._model.fit(X_train, y_train)
+        self._person_count = len(set((pair[1] for pair in descriptor_person_id_pairs)))
 
         X_test = X[test_idx]
         y_test = y[test_idx]
@@ -105,7 +107,11 @@ class Classifier:
         else:
             logger.warning(
                 'No test data - will be unable to calculate model accuracy')
-            return
+    
+    @property
+    def person_count(self):
+        'Number of person-identities this classifier is trained to recognize'
+        return self._person_count
 
     def recognize_person(self, face_descriptor):
         try:

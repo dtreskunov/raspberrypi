@@ -159,6 +159,18 @@ class DescriptorProcessor(Processor):
 class ClassifierProcessor(Processor):
     def __init__(self, classifier):
         self._classifier = classifier
+        self._descriptor_person_id_pairs = []
+
+    def __enter__(self):
+        if self._classifier.person_count == 0:
+            logger.info('classifier not fitted yet, unable to recognize any faces!')
+        return self
+
+    def __exit__(self, exc_type, exc_info, exc_tb):
+        if self._descriptor_person_id_pairs:
+            logger.info('fitting classifier over %d descriptor_person_id_pairs', len(
+                self._descriptor_person_id_pairs))
+            self._classifier.fit(self._descriptor_person_id_pairs)
 
     def _process(self, face: Face):
         if not face.descriptor:
@@ -166,13 +178,15 @@ class ClassifierProcessor(Processor):
                 'descriptor not present - ensure that DescriptorProcessor ' +
                 'is configured before ClassifierProcessor')
             return
-        try:
+        if face.person:
+            # training mode
+            self._descriptor_person_id_pairs.append(
+                (face.descriptor, face.person.id))
+        elif self._classifier.person_count > 0:
+            # recognition mode
             person_id, dist = self._classifier.recognize_person(
                 face.descriptor)
             face.person = Person(id=person_id, dist=dist)
-        except NotFittedError:
-            logger.warning(
-                'Classifier not fitted yet, unable to recognize any faces!')
 
     def process(self, data: InputOutput):
         if not data:
