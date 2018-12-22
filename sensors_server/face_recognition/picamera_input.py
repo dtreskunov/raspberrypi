@@ -38,7 +38,7 @@ def _initialize_inference() -> CameraInference:
     return CameraInference(face_detection.model())
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=1)
 def _get_scale(inference: Size, image: Size) -> float:
     if image.w / image.h != inference.w / inference.h:
         raise Exception('Inference result has different aspect ratio than camera capture: {}x{} to {}x{}'.format(
