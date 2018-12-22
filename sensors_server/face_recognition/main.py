@@ -7,18 +7,26 @@ import argparse
 import contextlib
 import logging
 
+from .dlib_wrapper import DlibWrapper
 from .picamera_input import PiCameraInput
 from .preview import Preview
-from .processor import PreviewProcessor
+from .processor import LandmarkProcessor, PreviewProcessor, ProcessorChain
 
 
 def main(args):
     with contextlib.ExitStack() as exit_stack:
+        processors = exit_stack.enter_context(ProcessorChain())
         pi_camera_input = exit_stack.enter_context(PiCameraInput())
-        preview_processor = exit_stack.enter_context(
-            PreviewProcessor(camera=pi_camera_input.camera))
+        if args.landmarks:
+            processors.append(
+                LandmarkProcessor(
+                    DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
+        if args.preview:
+            processors.append(
+                PreviewProcessor(camera=pi_camera_input.camera))
         for data in pi_camera_input.iterator():
-            preview_processor.process(data)
+            processors.process(data)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -28,6 +36,15 @@ if __name__ == '__main__':
         '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
     parser.add_argument(
         '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
+    parser.add_argument(
+        '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
+        choices=['shape_predictor_5_face_landmarks.dat',
+                 'shape_predictor_68_face_landmarks.dat'],
+        default='shape_predictor_68_face_landmarks.dat')
+    parser.add_argument(
+        '--landmarks', help='extract facial landmarks', action='store_true', default=True)
+    parser.add_argument(
+        '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
 
     args = parser.parse_args()
     if args.debug:

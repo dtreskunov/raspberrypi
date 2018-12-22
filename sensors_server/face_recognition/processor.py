@@ -2,6 +2,7 @@ import contextlib
 import logging
 import queue
 import threading
+from typing import Sequence
 
 import PIL.ImageDraw
 import PIL.ImageFont
@@ -78,9 +79,12 @@ class Processor:
 
 
 class ProcessorChain(Processor):
-    def __init__(self, *processors):
-        self._processors = processors
+    def __init__(self, *processors: Sequence[Processor]):
+        self._processors = list(processors)
         self._exit_stack = contextlib.ExitStack()
+    
+    def append(self, processor: Processor):
+        self._processors.append(processor)
 
     def __enter__(self):
         for processor in self._processors:
