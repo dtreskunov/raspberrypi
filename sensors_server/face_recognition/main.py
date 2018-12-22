@@ -27,12 +27,11 @@ def lookup_person(name):
 
 
 def main(args):
-    if args.name:
     with contextlib.ExitStack() as exit_stack:
-        processors = []
-
         person = lookup_person(args.name) if args.name else None
         pi_camera_input = exit_stack.enter_context(PiCameraInput(person))
+
+        processors = []
         if args.landmarks:
             processors.append(
                 LandmarkProcessor(
