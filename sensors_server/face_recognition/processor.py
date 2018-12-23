@@ -65,10 +65,6 @@ def annotate(image: PIL.Image, data: InputOutput) -> PIL.Image:
     return image
 
 
-# DlibWrapper.with_face_landmarks_model(
-#     face_landmarks_model='shape_predictor_68_face_landmarks.dat')
-
-
 class Processor:
     def __enter__(self):
         return self
