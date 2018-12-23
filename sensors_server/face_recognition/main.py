@@ -46,20 +46,20 @@ class FaceRecognitionApp(CLI):
                      'shape_predictor_68_face_landmarks.dat'],
             default='shape_predictor_68_face_landmarks.dat')
         group.add_argument(
-            '--landmarks', help='extract facial landmarks', action='store_true', default=True)
+            '--landmarks', help='extract facial landmarks', type=CLI.bool, default=True, const=True, nargs='?')
         group.add_argument(
             '--descriptor', help='extract facial descriptor (slow, but needed for recognition) (implies --landmarks)',
-            action='store_true', default=True)
+            type=CLI.bool, default=True, const=True, nargs='?')
         group.add_argument(
             '--name', help='name of person appearing in the input stream (implies --mode=training)')
         group.add_argument(
             '--mode', help='"training" implies --use-db', choices=['recognition', 'training'], default='recognition')
         group.add_argument(
-            '--use-db', help='implies --descriptor', action='store_true', default=True)
+            '--use-db', help='implies --descriptor', type=CLI.bool, default=True, const=True, nargs='?')
         group.add_argument(
             '--db-connection-params', default='provider=sqlite,filename=~/.face_recognition/data.sqlite')
         group.add_argument(
-            '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
+            '--preview', help='overlay data on top of live camera feed', type=CLI.bool, default=True, const=True, nargs='?')
         group.add_argument(
             '--save-annotated-images-to', help='location for saving images; if not set, images will not be saved')
 

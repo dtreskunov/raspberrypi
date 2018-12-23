@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import contextlib
+import distutils.util
 import logging
 import time
 import warnings
@@ -82,3 +83,7 @@ class CLI:
 
     def main(self, args):
         pass
+
+    @staticmethod
+    def bool(v):
+        return bool(distutils.util.strtobool(v))
