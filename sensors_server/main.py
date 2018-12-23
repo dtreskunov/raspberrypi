@@ -74,7 +74,7 @@ class SensorsServerApp(util.CLI):
                 client.publish(topic, msg)
 
         tasks = [
-            face_recognition_task(
+            self.face_recognition_task(
                 partial(publish, 'sensor/face_recognition'), args),
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(
