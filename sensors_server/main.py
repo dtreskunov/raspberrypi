@@ -9,6 +9,7 @@ from functools import partial
 import paho.mqtt.client as mqtt
 
 import util
+from face_recognition.main import FaceRecognitionApp
 from face_recognition.task import face_recognition_task
 from motion_sensor.task import motion_sensor_task
 from temperature_humidity_sensor.task import temperature_humidity_sensor_task
@@ -38,72 +39,56 @@ def mqtt_client(host, port):
     return client
 
 
-async def main(args):
-    client = mqtt_client(args.host, args.port)
-    client.loop_start()
+class SensorsServerApp(util.CLI):
+    def __init__(self):
+        super().__init__()
+        group = self.parser.add_argument_group(title='Sensors server options')
+        group.add_argument(
+            '--host', help='MQTT broker host', default='localhost')
+        group.add_argument(
+            '--port', help='MQTT broker port', default=1883, type=int)
 
-    def publish(topic, data):
-        with stopwatch('publishing data'):
-            msg = json.dumps(data)
-            logger.debug('publishing %d-byte JSON message to %s',
-                         len(msg), topic)
-            client.publish(topic, msg)
+        self.face_recognition_app = FaceRecognitionApp(self.parser)
 
-    tasks = [
-        face_recognition_task(
-            partial(publish, 'sensor/face_recognition'),
-            face_landmarks_model=args.face_landmarks_model,
-            save_annotated_images_to=args.save_annotated_images_to,
-            show_preview=args.preview,
-            skip_recognition=args.skip_recognition,
-            rollback_transactions=args.rollback_transactions),
-        motion_sensor_task(partial(publish, 'sensor/motion')),
-        temperature_humidity_sensor_task(
-            partial(publish, 'sensor/temperature_humidity')),
-    ]
-    for x in asyncio.as_completed(tasks):
-        try:
-            await x
-            logger.warning('sensor task completed unexpectedly')
-        except Exception:
-            logger.exception('sensor task died')
-    logger.info('all sensor tasks completed')
+    async def face_recognition_task(self, callback, args):
+        loop = asyncio.get_event_loop()
+
+        async def consume(data):
+            callback(data.to_dict())
+            await asyncio.sleep(0.1)
+        self.face_recognition_app.consume = consume
+        return await loop.run_in_executor(self.face_recognition_app.main, args)
+
+    def main(self, args):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_main(args))
+
+    async def async_main(self, args):
+        client = mqtt_client(args.host, args.port)
+        client.loop_start()
+
+        def publish(topic, data):
+            with stopwatch('publishing data'):
+                msg = json.dumps(data)
+                logger.debug('publishing %d-byte JSON message to %s',
+                             len(msg), topic)
+                client.publish(topic, msg)
+
+        tasks = [
+            face_recognition_task(
+                partial(publish, 'sensor/face_recognition'), args),
+            motion_sensor_task(partial(publish, 'sensor/motion')),
+            temperature_humidity_sensor_task(
+                partial(publish, 'sensor/temperature_humidity')),
+        ]
+        for x in asyncio.as_completed(tasks):
+            try:
+                await x
+                logger.warning('sensor task completed unexpectedly')
+            except Exception:
+                logger.exception('sensor task died')
+        logger.info('all sensor tasks completed')
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='Broadcasts Raspberry Pi sensor readings to MQTT broker')
-    parser.add_argument(
-        '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
-    parser.add_argument(
-        '--host', help='MQTT broker host', default='localhost')
-    parser.add_argument(
-        '--port', help='MQTT broker port', default=1883, type=int)
-    parser.add_argument(
-        '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
-    parser.add_argument(
-        '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
-        choices=['shape_predictor_5_face_landmarks.dat',
-                 'shape_predictor_68_face_landmarks.dat'],
-        default='shape_predictor_68_face_landmarks.dat')
-    parser.add_argument(
-        '--save-annotated-images-to', help='location for saving images; if not set, images will not be saved')
-    parser.add_argument(
-        '--preview', help='enable real-time camera preview', action='store_true')
-    parser.add_argument(
-        '--skip-recognition', help='skip face recognition (slow)', action='store_true')
-    parser.add_argument(
-        '--rollback-transactions', help='do not store anything in the database', action='store_true')
-
-    args = parser.parse_args()
-    if args.debug:
-        import ptvsd
-        address = ('0.0.0.0', 5678)
-        ptvsd.enable_attach(address=address)
-        print('Waiting for debugger on {}...'.format(address))
-        ptvsd.wait_for_attach()
-
-    logging.basicConfig(level=getattr(logging, args.loglevel))
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main(args))
+    SensorsServerApp().run()

@@ -17,7 +17,7 @@ class Region:
 
     def to_dict(self):
         return {'left': self.left, 'top': self.top, 'right': self.right, 'bottom': self.bottom}
-    
+
     @staticmethod
     def from_dict(d):
         return Region(d['left'], d['top'], d['right'], d['bottom'])
@@ -32,6 +32,13 @@ class Person:
     def __str__(self):
         return 'Person(id={}, dist={}, name={})'.format(str(self.id), self.dist, self.name)
     __repr__ = __str__
+
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'dist': self.dist,
+            'name': self.name,
+        }
 
 
 LabeledLandmarks = Mapping[str, List[Tuple[int, int]]]
@@ -60,6 +67,15 @@ class Face:
             self.person)
     __repr__ = __str__
 
+    def to_dict(self):
+        return {
+            'image_region': self.image_region.to_dict(),
+            'labeled_landmarks': self.labeled_landmarks,
+            'face_score': self.face_score,
+            'joy_score': self.joy_score,
+            'person': self.person.to_dict(),
+        }
+
 
 class InputOutput:
     def __init__(self, image: MyImage, faces: List[Face] = []):
@@ -68,5 +84,10 @@ class InputOutput:
 
     def __str__(self):
         return 'InputOutput(image={}, faces={})'.format(self.image, self.faces)
-
     __repr__ = __str__
+
+    def to_dict(self):
+        return {
+            'image_uri': self.image.data_uri,
+            'faces': [f.to_dict() for f in self.faces],
+        }

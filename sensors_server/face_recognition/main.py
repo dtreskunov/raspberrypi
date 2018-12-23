@@ -34,8 +34,8 @@ def lookup_person(name):
 
 
 class FaceRecognitionApp(CLI):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parser=None):
+        super().__init__(parser)
         group = self.parser.add_argument_group(title='Face recognition options')
         group.add_argument(
             '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
