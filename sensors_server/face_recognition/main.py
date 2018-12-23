@@ -111,8 +111,7 @@ class FaceRecognitionApp(CLI):
 
             processor_chain = exit_stack.enter_context(ProcessorChain(*processors))
             for data in pi_camera_input.iterator():
-                with stopwatch('processor chain'):
-                    data = processor_chain.process(data)
+                data = processor_chain.process(data)
                 self.consume(data)
 
 
