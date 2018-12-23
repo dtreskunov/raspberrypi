@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import threading
 from functools import partial
 
 import paho.mqtt.client as mqtt
@@ -38,26 +39,35 @@ def mqtt_client(host, port):
     return client
 
 
+def wrap(fn, callback, shutdown_event):
+    def wrapped_callback(msg):
+        if shutdown_event.is_set():
+            raise Exception('Shutdown signaled')
+        callback(msg)
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, fn, wrapped_callback)
+
 class FaceRecognitionWrapper(FaceRecognitionApp):
-    def main(self, callback, args):
+    def main(self, args, callback):
         self._callback = callback
         super().main(args)
 
-    async def consume(self, data):
+    def consume(self, data):
         if data:
             self._callback(data.to_dict())
-        await asyncio.sleep(0.1)
 
 
 class SensorsServerApp(util.CLI):
     def __init__(self):
         super().__init__()
+        self._shutdown = threading.Event()
+        self._face_recognition_wrapper = FaceRecognitionWrapper(self.parser)
+
         group = self.parser.add_argument_group(title='Sensors server options')
         group.add_argument(
             '--host', help='MQTT broker host', default='localhost')
         group.add_argument(
             '--port', help='MQTT broker port', default=1883, type=int)
-        self._face_recognition_wrapper = FaceRecognitionWrapper(self.parser)
 
     async def async_main(self, args):
         client = mqtt_client(args.host, args.port)
@@ -71,8 +81,10 @@ class SensorsServerApp(util.CLI):
                 client.publish(topic, msg)
 
         tasks = [
-            self._face_recognition_wrapper.main(
-                partial(publish, 'sensor/face_recognition'), args),
+            wrap(
+                partial(self._face_recognition_wrapper.main, args),
+                partial(publish, 'sensor/face_recognition'),
+                self._shutdown),
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(
                 partial(publish, 'sensor/temperature_humidity')),
@@ -87,7 +99,11 @@ class SensorsServerApp(util.CLI):
     
     def main(self, args):
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.async_main(args))
+        try:
+            loop.run_until_complete(self.async_main(args))
+        except (SystemExit, KeyboardInterrupt):
+            self._shutdown.set()
+            raise
 
 if __name__ == '__main__':
     SensorsServerApp().run()
