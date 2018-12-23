@@ -126,6 +126,8 @@ class SaveAnnotatedImageProcessor(Processor):
         os.makedirs(self._dir, exist_ok=True)
 
     def process(self, data: InputOutput):
+        if not data or not data.faces:
+            return
         timestamp = time.strftime('%Y-%m-%d_%H.%M.%S')
         filename = '{}/{}.jpg'.format(self._dir, timestamp)
         with stopwatch('saving annotated image to {}'.format(filename)):
