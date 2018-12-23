@@ -53,15 +53,16 @@ def lazy_getter(func):
 
 
 class CLI:
-    def __init__(self):
-        parser = argparse.ArgumentParser(
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument(
-            '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
-        parser.add_argument(
-            '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
+    def __init__(self, parser=None):
+        if not parser:
+            parser = argparse.ArgumentParser(
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            parser.add_argument(
+                '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
+            parser.add_argument(
+                '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
         self.parser = parser
-    
+
     def run(self):
         args = self.parser.parse_args()
         if args.debug:
