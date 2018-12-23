@@ -56,7 +56,7 @@ class SensorsServerApp(util.CLI):
             callback(data.to_dict())
             await asyncio.sleep(0.1)
         self.face_recognition_app.consume = consume
-        return await loop.run_in_executor(self.face_recognition_app.main, args)
+        return await loop.run_in_executor(None, self.face_recognition_app.main, args)
 
     def main(self, args):
         loop = asyncio.get_event_loop()
