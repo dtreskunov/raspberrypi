@@ -47,7 +47,7 @@ class DetectedFace(db.Entity):
 
 def get_descriptor_person_id_pairs():
     with orm.db_session:
-        return orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:]
+        return list(orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:])
 
 def get_or_create_person_by_name(name):
     with orm.db_session:
