@@ -38,10 +38,6 @@ class FaceRecognitionApp(CLI):
         super().__init__()
         group = self.parser.add_argument_group(title='Face recognition options')
         group.add_argument(
-            '-d', '--debug', help='enable remote debugger compatible with VS Code', action='store_true')
-        group.add_argument(
-            '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
-        group.add_argument(
             '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
             choices=['shape_predictor_5_face_landmarks.dat',
                     'shape_predictor_68_face_landmarks.dat'],
