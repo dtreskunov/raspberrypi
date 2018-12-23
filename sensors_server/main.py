@@ -59,10 +59,6 @@ class SensorsServerApp(util.CLI):
             '--port', help='MQTT broker port', default=1883, type=int)
         self._face_recognition_wrapper = FaceRecognitionWrapper(self.parser)
 
-    def main(self, args):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.async_main(args))
-
     async def async_main(self, args):
         client = mqtt_client(args.host, args.port)
         client.loop_start()
@@ -75,7 +71,7 @@ class SensorsServerApp(util.CLI):
                 client.publish(topic, msg)
 
         tasks = [
-            self._face_recognition_wrapper.main(
+            self._face_recognition_wrapper.async_main(
                 partial(publish, 'sensor/face_recognition'), args),
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(

@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import contextlib
 import logging
 import time
@@ -62,8 +63,8 @@ class CLI:
             parser.add_argument(
                 '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
         self.parser = parser
-
-    def run(self):
+    
+    def _setup(self):
         args = self.parser.parse_args()
         if args.debug:
             import ptvsd
@@ -74,7 +75,17 @@ class CLI:
         logging.basicConfig(level=getattr(logging, args.loglevel))
         logging.captureWarnings(True)
         warnings.simplefilter('default', DeprecationWarning)
-        self.main(args)
+        return args
+
+    def run(self):
+        self.main(self._setup())
 
     def main(self, args):
+        pass
+
+    async def async_run(self):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_main(self._setup()))
+
+    async def async_main(self, args):
         pass
