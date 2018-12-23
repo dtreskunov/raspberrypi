@@ -17,7 +17,7 @@ class Person(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
     created_at = orm.Required(
         datetime.datetime, sql_default='CURRENT_TIMESTAMP')
-    name = orm.Required(str)
+    name = orm.Required(str, unique=True, index=True)
     detected_faces = orm.Set(lambda: DetectedFace)
 
 
@@ -49,6 +49,12 @@ def get_descriptor_person_id_pairs():
     with orm.db_session:
         return orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:]
 
+def get_or_create_person_by_name(name):
+    with orm.db_session:
+        persons = Person.select(lambda p: p.name == name)[:1]
+        if persons:
+            return persons[0]
+        return Person(name=name)
 
 @contextlib.contextmanager
 def db_connection(*args, **kwds):

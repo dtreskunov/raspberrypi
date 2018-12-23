@@ -12,7 +12,7 @@ from util import make_stopwatch
 
 from .classifier import Classifier
 from .database import Person as DBPerson
-from .database import db_connection, get_descriptor_person_id_pairs
+from .database import db_connection, get_descriptor_person_id_pairs, get_or_create_person_by_name
 from .dlib_wrapper import DlibWrapper
 from .domain_types import Person
 from .picamera_input import PiCameraInput
@@ -26,8 +26,11 @@ stopwatch = make_stopwatch(logger)
 
 
 def lookup_person(name):
-    # TODO: hook up to the database
-    return Person(id=name, name=name, dist=0.0)
+    db_person = get_or_create_person_by_name(name)
+    return Person(
+        id=db_person.id,
+        name=db_person.name,
+        dist=0.0)
 
 
 def main(args):
