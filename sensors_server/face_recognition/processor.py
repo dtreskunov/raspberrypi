@@ -159,7 +159,7 @@ class DescriptorProcessor(Processor):
 
 
 class ClassifierProcessor(Processor):
-    def __init__(self, classifier, threshold=0.5):
+    def __init__(self, classifier, threshold=0.55):
         self._classifier = classifier
         self._threshold = threshold
 
@@ -170,7 +170,7 @@ class ClassifierProcessor(Processor):
         if dist < self._threshold:
             face.person = Person(id=person_id, dist=dist)
             logger.info(
-                '%s found at a distance of %.2f (threshod %.2f)',
+                '%s found at a distance of %.2f (threshold %.2f)',
                 person_id, dist, self._threshold)
         else:
             logger.info(
