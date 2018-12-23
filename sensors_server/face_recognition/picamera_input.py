@@ -63,15 +63,23 @@ def _get_image_region(aiy_bounding_box: tuple, inference: Size, image: Size) -> 
     )
 
 class PiCameraInput:
-    def __init__(self, person = None):
+    def __init__(self):
         self._stack = contextlib.ExitStack()
         self._camera = None
         self._inference = None
-        self._person = person
+        self._person = None
     
     @property
     def camera(self):
         return self._camera
+    
+    @property
+    def person(self):
+        return self._person
+    
+    @person.setter
+    def person(self, person):
+        self._person = person
 
     def __enter__(self):
         # Forced sensor mode, 1640x1232, full FoV. See:

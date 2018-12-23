@@ -34,9 +34,9 @@ def lookup_person(name):
 
 
 def main(args):
+    logger.debug('entering main(%s)', args)
     with contextlib.ExitStack() as exit_stack:
-        person = lookup_person(args.name) if args.name else None
-        pi_camera_input = exit_stack.enter_context(PiCameraInput(person))
+        pi_camera_input = exit_stack.enter_context(PiCameraInput())
 
         processors = []
         if args.landmarks:
@@ -50,6 +50,8 @@ def main(args):
         if args.use_db:
             exit_stack.enter_context(
                 db_connection(**args.db_connection_params))
+            if args.name:
+                pi_camera_input.person = lookup_person(args.name)
             if args.mode == 'recognition':
                 classifier = Classifier()
                 with stopwatch('fitting classifier'):
