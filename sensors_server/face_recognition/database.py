@@ -1,6 +1,7 @@
 import contextlib
 import datetime
 import logging
+import os.path
 import uuid as uuid_lib
 
 from pony import orm
@@ -36,21 +37,26 @@ class DetectedFace(db.Entity):
     created_at = orm.Required(
         datetime.datetime, sql_default='CURRENT_TIMESTAMP')
     image = orm.Optional(lambda: Image)
-    image_region = orm.Required(orm.Json)  # [left, top, right, bottom]
+    image_region = orm.Optional(orm.Json)  # [left, top, right, bottom]
     descriptor = orm.Optional(orm.Json)  # float[128]
-    labeled_landmarks = orm.Required(orm.Json)  # {"left_eye":[(123,456)]}
+    labeled_landmarks = orm.Optional(orm.Json)  # {"left_eye":[(123,456)]}
     face_score = orm.Optional(float)
     joy_score = orm.Optional(float)
     person = orm.Optional(lambda: Person)
 
 
 def get_descriptor_person_id_pairs():
-    return orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:]
+    with orm.db_session:
+        return orm.select((df.descriptor, df.person.id) for df in DetectedFace if df.person)[:]
 
 
 @contextlib.contextmanager
 def db_connection(*args, **kwds):
     with orm.sql_debugging(debug=(logger.getEffectiveLevel() == logging.DEBUG)):
+        kwds['create_db'] = True
+        filename = kwds.get('filename', None)
+        if filename:
+            kwds['filename'] = os.path.expanduser(filename)
         db.bind(*args, **kwds)
         db.generate_mapping(create_tables=True)
         yield

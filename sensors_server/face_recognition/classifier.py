@@ -16,19 +16,6 @@ from .constants import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-THRESHOLD = 0.5
-
-
-def _unpickle(path):
-    with open(path, 'rb') as f:
-        return pickle.load(f)
-
-
-def _pickle(obj, path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'wb') as f:
-        pickle.dump(obj, f)
-
 
 def _create_default_model():
     logger.info(
@@ -36,27 +23,8 @@ def _create_default_model():
     return sklearn.neighbors.KNeighborsClassifier(n_neighbors=1, metric='euclidean')
 
 
-@contextlib.contextmanager
-def pickled_classifier(pickle_file, create_default_model=_create_default_model):
-    pickle_file = os.path.expanduser(pickle_file)
-    classifier = None
-    try:
-        classifier = _unpickle(pickle_file)
-    except Exception as e:
-        logger.warning(
-            'Unable to unpickle classifier from %s due to %s', pickle_file, e)
-    if not classifier:
-        logger.info('Creating empty classifier')
-        classifier = Classifier(create_default_model(),
-                                sklearn.preprocessing.LabelEncoder())
-    try:
-        yield classifier
-    finally:
-        try:
-            _pickle(classifier, pickle_file)
-        except Exception as e:
-            logger.warning(
-                'Unable to pickle classifier to %s due to %s', pickle_file, e)
+def _create_default_encoder():
+    return sklearn.preprocessing.LabelEncoder()
 
 
 class NotFittedError(RuntimeError):
@@ -65,9 +33,9 @@ class NotFittedError(RuntimeError):
 
 
 class Classifier:
-    def __init__(self, model, encoder):
-        self._model = model
-        self._encoder = encoder
+    def __init__(self, model_factory=_create_default_model, encoder_factory=_create_default_encoder):
+        self._model = model_factory()
+        self._encoder = encoder_factory()
         self._person_count = 0
 
     def fit(self, descriptor_person_id_pairs):
@@ -94,7 +62,8 @@ class Classifier:
         y_train = y[train_idx]
 
         self._model.fit(X_train, y_train)
-        self._person_count = len(set((pair[1] for pair in descriptor_person_id_pairs)))
+        self._person_count = len(
+            set((pair[1] for pair in descriptor_person_id_pairs)))
 
         X_test = X[test_idx]
         y_test = y[test_idx]
@@ -107,7 +76,7 @@ class Classifier:
         else:
             logger.warning(
                 'No test data - will be unable to calculate model accuracy')
-    
+
     @property
     def person_count(self):
         'Number of person-identities this classifier is trained to recognize'
@@ -118,14 +87,6 @@ class Classifier:
             distance = self._model.kneighbors([face_descriptor])[0][0][0]
             prediction = self._model.predict([face_descriptor])
             person_id = self._encoder.inverse_transform(prediction)[0]
+            return person_id, distance
         except sklearn.exceptions.NotFittedError as e:
             raise NotFittedError(e)
-
-        if distance < THRESHOLD:
-            logger.info('%s found at a distance of %.2f (threshold %.2f)',
-                        person_id, distance, THRESHOLD)
-            return person_id, distance
-        else:
-            logger.info('no match found within threshold of %.2f; nearest neighbor is %s at a distance of %.2f',
-                        THRESHOLD, person_id, distance)
-            return None, distance

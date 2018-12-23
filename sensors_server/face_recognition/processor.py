@@ -8,10 +8,12 @@ import PIL.ImageDraw
 import PIL.ImageFont
 
 import util
-from aiy.vision.models import face_detection
 
-from .classifier import NotFittedError, pickled_classifier
-from .constants import DATA_DIR
+from .classifier import Classifier
+from .database import DetectedFace as DBFace
+from .database import Image as DBImage
+from .database import Person as DBPerson
+from .database import db_transaction, get_descriptor_person_id_pairs
 from .dlib_wrapper import DlibWrapper
 from .domain_types import Face, InputOutput, Person, Region
 from .image import MyImage
@@ -157,39 +159,83 @@ class DescriptorProcessor(Processor):
 
 
 class ClassifierProcessor(Processor):
-    def __init__(self, classifier):
+    def __init__(self, classifier, threshold=0.5):
         self._classifier = classifier
-        self._descriptor_person_id_pairs = []
-
-    def __enter__(self):
-        if self._classifier.person_count == 0:
-            logger.info('classifier not fitted yet, unable to recognize any faces!')
-        return self
-
-    def __exit__(self, exc_type, exc_info, exc_tb):
-        if self._descriptor_person_id_pairs:
-            logger.info('fitting classifier over %d descriptor_person_id_pairs', len(
-                self._descriptor_person_id_pairs))
-            self._classifier.fit(self._descriptor_person_id_pairs)
+        self._threshold = threshold
 
     def _process(self, face: Face):
-        if not face.descriptor:
-            logger.warning(
-                'descriptor not present - ensure that DescriptorProcessor ' +
-                'is configured before ClassifierProcessor')
+        if not face.descriptor or face.person or self._classifier.person_count == 0:
             return
-        if face.person:
-            # training mode
-            self._descriptor_person_id_pairs.append(
-                (face.descriptor, face.person.id))
-        elif self._classifier.person_count > 0:
-            # recognition mode
-            person_id, dist = self._classifier.recognize_person(
-                face.descriptor)
+        person_id, dist = self._classifier.recognize_person(face.descriptor)
+        if dist < self._threshold:
             face.person = Person(id=person_id, dist=dist)
+            logger.info(
+                '%s found at a distance of %.2f (threshod %.2f)',
+                person_id, dist, self._threshold)
+        else:
+            logger.info(
+                'no match found within threshold of %.2f; nearest match is at a distance of %.2f',
+                self._threshold, dist)
 
     def process(self, data: InputOutput):
         if not data:
             return
         for face in data.faces:
             self._process(face)
+
+
+class DatabaseProcessor(Processor):
+    def __init__(self, mode='recognition'):
+        self._mode = mode
+
+    def _process_recognition(self, data: InputOutput):
+        has_unrecognized_faces = any(
+            filter(lambda face: not face.person, data.faces))
+
+        db_image = None
+        if has_unrecognized_faces:
+            logger.debug(
+                'image has unrecognized faces, saving it to database...')
+            db_image = DBImage(
+                mime_type='image/jpeg',
+                width=data.image.width,
+                height=data.image.height,
+                data=data.image.bytes)
+
+        for face in data.faces:
+            if face.person:
+                # classifier was able to find person's id; fetch person's name from database
+                db_person = DBPerson[face.person.id]
+                if db_person:
+                    face.person.name = db_person.name
+            else:
+                logger.debug(
+                    'saving unrecognized %s to database for manual recognition', face)
+                DBFace(
+                    image=db_image,
+                    image_region=face.image_region.to_dict(),
+                    descriptor=face.descriptor,
+                    labeled_landmarks=face.labeled_landmarks,
+                    face_score=face.face_score,
+                    joy_score=face.joy_score)
+
+    def _process_training(self, data: InputOutput):
+        for face in data.faces:
+            if not face.person or not face.person.id:
+                logger.warning('no person id provided when in training mode')
+                continue
+            logger.debug('saving %s to database in training mode', face)
+            DBFace(
+                descriptor=face.descriptor,
+                person=DBPerson[face.person.id])
+
+    def process(self, data: InputOutput):
+        if not data or not data.faces:
+            return
+        with db_transaction:
+            if self._mode == 'recognition':
+                return self._process_recognition(data)
+            elif self._mode == 'training':
+                return self._process_training(data)
+            else:
+                raise ValueError('Invalid mode: ' + self._mode)

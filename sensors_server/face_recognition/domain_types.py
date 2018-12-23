@@ -15,6 +15,13 @@ class Region:
         return 'Region(left={}, top={}, right={}, bottom={})'.format(self.left, self.top, self.right, self.bottom)
     __repr__ = __str__
 
+    def to_dict(self):
+        return {'left': self.left, 'top': self.top, 'right': self.right, 'bottom': self.bottom}
+    
+    @staticmethod
+    def from_dict(d):
+        return Region(d['left'], d['top'], d['right'], d['bottom'])
+
 
 class Person:
     def __init__(self, id: UUID, dist: float, name: str = None):

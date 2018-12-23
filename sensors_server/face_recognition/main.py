@@ -10,13 +10,16 @@ import warnings
 
 from util import make_stopwatch
 
-from .classifier import pickled_classifier
+from .classifier import Classifier
+from .database import Person as DBPerson
+from .database import db_connection, get_descriptor_person_id_pairs
 from .dlib_wrapper import DlibWrapper
 from .domain_types import Person
 from .picamera_input import PiCameraInput
 from .preview import Preview
-from .processor import (ClassifierProcessor, DescriptorProcessor,
-                        LandmarkProcessor, PreviewProcessor, ProcessorChain)
+from .processor import (ClassifierProcessor, DatabaseProcessor,
+                        DescriptorProcessor, LandmarkProcessor,
+                        PreviewProcessor, ProcessorChain)
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
@@ -41,11 +44,17 @@ def main(args):
             processors.append(
                 DescriptorProcessor(
                     DlibWrapper.with_face_landmarks_model(args.face_landmarks_model)))
-        if args.classifier_data:
-            processors.append(
-                ClassifierProcessor(
-                    exit_stack.enter_context(pickled_classifier(args.classifier_data))))
-
+        if args.use_db:
+            exit_stack.enter_context(
+                db_connection(**args.db_connection_params))
+            if args.mode == 'recognition':
+                classifier = Classifier()
+                with stopwatch('fitting classifier'):
+                    classifier.fit(get_descriptor_person_id_pairs())
+                logger.info(
+                    'classifier fit to recognize %d person(s)', classifier.person_count)
+                processors.append(ClassifierProcessor(classifier))
+            processors.append(DatabaseProcessor(mode=args.mode))
         if args.preview:
             processors.append(
                 PreviewProcessor(camera=pi_camera_input.camera))
@@ -77,10 +86,13 @@ if __name__ == '__main__':
         '--descriptor', help='extract facial descriptor (slow, but needed for recognition) (implies --landmarks)',
         action='store_true', default=True)
     parser.add_argument(
-        '--classifier-data', help='use specified file as classifier storage (implies --descriptor)',
-        default='~/.face_recognition/classifier.pickle')
+        '--name', help='name of person appearing in the input stream (implies --mode=training)')
     parser.add_argument(
-        '--name', help='name of the person appearing in the input stream (used for training)')
+        '--mode', help='"training" implies --use-db', choices=['recognition', 'training'], default='recognition')
+    parser.add_argument(
+        '--use-db', help='implies --descriptor', action='store_true', default=True)
+    parser.add_argument(
+        '--db-connection-params', default='provider=sqlite,filename=~/.face_recognition/data.sqlite')
     parser.add_argument(
         '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
 
@@ -92,12 +104,21 @@ if __name__ == '__main__':
         print('Waiting for debugger on {}...'.format(address))
         ptvsd.wait_for_attach()
 
-    if args.classifier_data and not args.descriptor:
-        print('--descriptor implied')
+    if args.name and args.mode != 'training':
+        print('--mode=training implied by --name')
+        args.mode = 'training'
+    if args.mode == 'training' and not args.use_db:
+        print('--use-db implied by --mode=training')
+        args.use_db = True
+    if args.use_db and not args.descriptor:
+        print('--descriptor implied by --use-db')
         args.descriptor = True
     if args.descriptor and not args.landmarks:
-        print('--landmarks implied')
+        print('--landmarks implied by --descriptor')
         args.landmarks = True
+
+    args.db_connection_params = dict(
+        (kv.split('=') for kv in args.db_connection_params.split(',')))
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
     logging.captureWarnings(True)
