@@ -105,7 +105,7 @@ class PiCameraInput:
         for inference_result in self._inference.run():
             aiy_faces = face_detection.get_faces(inference_result)
             if not aiy_faces:
-                yield 
+                yield None
                 continue
 
             # inference runs on the vision bonnet, which grabs images from the camera directly
