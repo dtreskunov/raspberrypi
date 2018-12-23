@@ -82,10 +82,3 @@ class CLI:
 
     def main(self, args):
         pass
-
-    async def async_run(self):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.async_main(self._setup()))
-
-    async def async_main(self, args):
-        pass

@@ -39,7 +39,7 @@ def mqtt_client(host, port):
 
 
 class FaceRecognitionWrapper(FaceRecognitionApp):
-    async def main(self, callback, args):
+    def main(self, callback, args):
         self._callback = callback
         super().main(args)
 
@@ -71,7 +71,7 @@ class SensorsServerApp(util.CLI):
                 client.publish(topic, msg)
 
         tasks = [
-            self._face_recognition_wrapper.async_main(
+            self._face_recognition_wrapper.main(
                 partial(publish, 'sensor/face_recognition'), args),
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(
@@ -84,7 +84,10 @@ class SensorsServerApp(util.CLI):
             except Exception:
                 logger.exception('sensor task died')
         logger.info('all sensor tasks completed')
-
+    
+    def main(self, args):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_main(args))
 
 if __name__ == '__main__':
     SensorsServerApp().run()
