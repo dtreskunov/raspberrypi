@@ -1,7 +1,10 @@
 import contextlib
 import logging
+import os
+import os.path
 import queue
 import threading
+import time
 from typing import Sequence
 
 import PIL.ImageDraw
@@ -115,6 +118,22 @@ class PreviewProcessor(Preview, Processor):
                 self._dirty = False
                 self.clear()
                 self.update()
+
+
+class SaveAnnotatedImageProcessor(Processor):
+    def __init__(self, _dir):
+        self._dir = os.path.expanduser(_dir)
+        os.makedirs(self._dir, exist_ok=True)
+
+    def process(self, data: InputOutput):
+        timestamp = time.strftime('%Y-%m-%d_%H.%M.%S')
+        filename = '{}/{}.jpg'.format(self._dir, timestamp)
+        with stopwatch('saving annotated image to {}'.format(filename)):
+            image = data.image.pil_image
+            draw = PIL.ImageDraw.Draw(image)
+            for face in data.faces:
+                draw_face(draw, face)
+            image.save(filename)
 
 
 class LandmarkProcessor(Processor):

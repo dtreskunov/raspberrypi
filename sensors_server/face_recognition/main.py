@@ -12,14 +12,16 @@ from util import CLI, make_stopwatch
 
 from .classifier import Classifier
 from .database import Person as DBPerson
-from .database import db_connection, get_descriptor_person_id_pairs, get_or_create_person_by_name
+from .database import (db_connection, get_descriptor_person_id_pairs,
+                       get_or_create_person_by_name)
 from .dlib_wrapper import DlibWrapper
 from .domain_types import Person
 from .picamera_input import PiCameraInput
 from .preview import Preview
 from .processor import (ClassifierProcessor, DatabaseProcessor,
                         DescriptorProcessor, LandmarkProcessor,
-                        PreviewProcessor, ProcessorChain)
+                        PreviewProcessor, ProcessorChain,
+                        SaveAnnotatedImageProcessor)
 
 logger = logging.getLogger(__name__)
 stopwatch = make_stopwatch(logger)
@@ -36,11 +38,12 @@ def lookup_person(name):
 class FaceRecognitionApp(CLI):
     def __init__(self, parser=None):
         super().__init__(parser)
-        group = self.parser.add_argument_group(title='Face recognition options')
+        group = self.parser.add_argument_group(
+            title='Face recognition options')
         group.add_argument(
             '--face-landmarks-model', help='model to download from http://dlib.net/files/ (sans .bz2 extension)',
             choices=['shape_predictor_5_face_landmarks.dat',
-                    'shape_predictor_68_face_landmarks.dat'],
+                     'shape_predictor_68_face_landmarks.dat'],
             default='shape_predictor_68_face_landmarks.dat')
         group.add_argument(
             '--landmarks', help='extract facial landmarks', action='store_true', default=True)
@@ -57,7 +60,9 @@ class FaceRecognitionApp(CLI):
             '--db-connection-params', default='provider=sqlite,filename=~/.face_recognition/data.sqlite')
         group.add_argument(
             '--preview', help='overlay data on top of live camera feed', action='store_true', default=True)
-    
+        group.add_argument(
+            '--save-annotated-images-to', help='location for saving images; if not set, images will not be saved')
+
     def consume(self, data):
         if data:
             logger.info(data)
@@ -108,8 +113,12 @@ class FaceRecognitionApp(CLI):
             if args.preview:
                 processors.append(
                     PreviewProcessor(camera=pi_camera_input.camera))
+            if args.save_annotated_images_to:
+                processors.append(
+                    SaveAnnotatedImageProcessor(args.save_annotated_images_to))
 
-            processor_chain = exit_stack.enter_context(ProcessorChain(*processors))
+            processor_chain = exit_stack.enter_context(
+                ProcessorChain(*processors))
             for data in pi_camera_input.iterator():
                 data = processor_chain.process(data)
                 self.consume(data)
