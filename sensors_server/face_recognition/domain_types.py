@@ -73,7 +73,7 @@ class Face:
             'labeled_landmarks': self.labeled_landmarks,
             'face_score': self.face_score,
             'joy_score': self.joy_score,
-            'person': self.person.to_dict(),
+            'person': self.person.to_dict() if self.person else None,
         }
 
 
