@@ -10,7 +10,6 @@ import paho.mqtt.client as mqtt
 
 import util
 from face_recognition.main import FaceRecognitionApp
-from face_recognition.task import face_recognition_task
 from motion_sensor.task import motion_sensor_task
 from temperature_humidity_sensor.task import temperature_humidity_sensor_task
 
