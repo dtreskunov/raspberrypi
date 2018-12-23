@@ -40,14 +40,14 @@ def mqtt_client(host, port):
 
 
 class FaceRecognitionWrapper(FaceRecognitionApp):
-    def main(self, callback, args, shutdown_event):
+    def main(self, callback, args, shutdown):
         self._callback = callback
-        self._shutdown_event = shutdown_event
+        self._shutdown = shutdown
         loop = asyncio.get_event_loop()
         return loop.run_in_executor(None, super().main, args)
 
     def consume(self, data):
-        if self._shutdown_event.is_set():
+        if self._shutdown.is_set():
             raise Exception('Shutdown signaled')
         if data:
             self._callback(data.to_dict())
@@ -79,7 +79,7 @@ class SensorsServerApp(util.CLI):
         tasks = [
             self._face_recognition_wrapper.main(
                 partial(publish, 'sensor/face_recognition'),
-                args, self._shutdodwn),
+                args, self._shutdown),
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(
                 partial(publish, 'sensor/temperature_humidity')),
