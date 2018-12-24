@@ -14,16 +14,16 @@ class FaceRecognitionWebApp(CLI):
     def __init__(self, parser=None):
         super().__init__(parser)
         group = self.parser.add_argument_group(
-            title='Face recognition web app options')
+            title='Face recognition web app options (prefixed with `frwa-` to avoid conflicts)')
         group.add_argument(
-            '--host', help='host embedded server listens on; restrict access by setting to "127.0.0.1"', default='0.0.0.0')
+            '--frwa-host', help='host embedded server listens on; restrict access by setting to "127.0.0.1"', default='0.0.0.0')
         group.add_argument(
-            '--port', help='port embedded server listens on', default='5000')
+            '--frwa-port', help='port embedded server listens on', default='5000')
         group.add_argument(
-            '--debug', help='activate Flask debug mode', action='store_true', default=False)
+            '--frwa-debug', help='activate Flask debug mode', action='store_true', default=False)
 
     def main(self, args):
-        app.run(host=args.host, port=args.port, debug=args.debug)
+        app.run(host=args.frwa_host, port=args.frwa_port, debug=args.frwa_debug)
 
 
 if __name__ == '__main__':
