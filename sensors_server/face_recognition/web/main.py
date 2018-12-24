@@ -1,6 +1,6 @@
 from flask import Flask
 
-from util import CLI
+from sensors_server.util import CLI
 
 app = Flask(__name__.split('.')[0])
 
