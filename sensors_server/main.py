@@ -13,6 +13,7 @@ import util
 from face_recognition.main import FaceRecognitionApp
 from motion_sensor.task import motion_sensor_task
 from temperature_humidity_sensor.task import temperature_humidity_sensor_task
+from aiy_vision.task import aiy_vision_task
 
 logger = logging.getLogger(__name__)
 stopwatch = util.make_stopwatch(logger)
@@ -83,6 +84,7 @@ class SensorsServerApp(util.CLI):
             motion_sensor_task(partial(publish, 'sensor/motion')),
             temperature_humidity_sensor_task(
                 partial(publish, 'sensor/temperature_humidity')),
+            aiy_vision_task(partial(publish, 'sensor/aiy_vision')),
         ]
         for x in asyncio.as_completed(tasks):
             try:
