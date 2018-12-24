@@ -14,11 +14,13 @@ def index():
 
 
 @app.route('/person', methods=['GET'])
+@db_transaction
 def persons():
     return jsonify(list(Person.select()))
 
 
 @app.route('/person/<uuid:person_id>', methods=['GET'])
+@db_transaction
 def person(person_id):
     return jsonify(Person[person_id])
 
