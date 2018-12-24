@@ -18,7 +18,7 @@ class FaceRecognitionWebApp(CLI):
         group.add_argument(
             '--frwa-host', help='host embedded server listens on; restrict access by setting to "127.0.0.1"', default='0.0.0.0')
         group.add_argument(
-            '--frwa-port', help='port embedded server listens on', default='5000')
+            '--frwa-port', help='port embedded server listens on', type=int, default='5000')
         group.add_argument(
             '--frwa-debug', help='activate Flask debug mode', action='store_true', default=False)
 
