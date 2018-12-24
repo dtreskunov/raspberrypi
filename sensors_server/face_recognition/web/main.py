@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 
 from util import CLI
-from ..database import db_connection, db_transaction, Person
+from face_recognition.database import db_connection, db_transaction, Person
 import logging
 
 logger = logging.getLogger(__name__)
