@@ -16,13 +16,17 @@ def index():
 @app.route('/person', methods=['GET'])
 @db_transaction
 def persons():
-    return jsonify(list(Person.select()))
+    return jsonify([p.to_dict(with_collections=True) for p in Person.select()])
 
 
 @app.route('/person/<uuid:person_id>', methods=['GET'])
 @db_transaction
 def person(person_id):
-    return jsonify(Person[person_id])
+    p = Person[person_id]
+    if p:
+        return jsonify(p.to_dict(with_collections=True))
+    else:
+        return 404
 
 
 class FaceRecognitionWebApp(CLI):
