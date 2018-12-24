@@ -2,13 +2,16 @@ from flask import Flask, jsonify
 
 from util import CLI
 from ..database import db_connection, db_transaction, Person
+import logging
 
+logger = logging.getLogger(__name__)
 app = Flask(__name__.split('.')[0])
 
 
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
+
 
 @app.route('/person', methods=['GET'])
 def persons():
@@ -40,7 +43,8 @@ class FaceRecognitionWebApp(CLI):
 
         logger.debug('final args: %s', args)
         with db_connection(**args.frwa_db_connection_params):
-            app.run(host=args.frwa_host, port=args.frwa_port, debug=args.frwa_debug)
+            app.run(host=args.frwa_host, port=args.frwa_port,
+                    debug=args.frwa_debug)
 
 
 if __name__ == '__main__':
