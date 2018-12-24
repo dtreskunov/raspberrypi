@@ -16,8 +16,8 @@ async def aiy_vision_task(callback):
             firmware_info = engine.get_firmware_info()
             callback({
                 'inference_state': {
-                    'loaded_models': list(inference_state.loaded_models),
-                    'processing_models': list(inference_state.processing_models),
+                    'loaded_models': [str(x) for x in inference_state.loaded_models],
+                    'processing_models': [str(x) for x in inference_state.processing_models],
                 },
                 'camera_state': {
                     'running': camera_state.running,
