@@ -7,7 +7,7 @@ app = Flask(__name__.split('.')[0])
 
 @app.route('/')
 def index():
-    app.send_static_file('index.html')
+    return app.send_static_file('index.html')
 
 
 class FaceRecognitionWebApp(CLI):
