@@ -82,8 +82,8 @@ class SensorsServerApp(util.CLI):
                 partial(publish, 'sensor/face_recognition'),
                 args, self._shutdown),
             motion_sensor_task(partial(publish, 'sensor/motion')),
-            temperature_humidity_sensor_task(
-                partial(publish, 'sensor/temperature_humidity')),
+            # temperature_humidity_sensor_task(
+            #     partial(publish, 'sensor/temperature_humidity')),
             aiy_vision_task(partial(publish, 'sensor/aiy_vision')),
         ]
         for x in asyncio.as_completed(tasks):
