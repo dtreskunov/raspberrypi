@@ -1,8 +1,10 @@
-from flask import Flask, jsonify
-
-from util import CLI
-from face_recognition.database import db_connection, db_transaction, Person
+import inspect
 import logging
+
+from flask import Flask, jsonify, request
+
+import face_recognition.database as db
+from util import CLI
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__.split('.')[0])
@@ -13,20 +15,52 @@ def index():
     return app.send_static_file('index.html')
 
 
-@app.route('/person', methods=['GET'])
-@db_transaction
-def persons():
-    return jsonify([p.to_dict(with_collections=True) for p in Person.select()])
+def get_entity_class(entity_type):
+    attr = getattr(db, entity_type.title(), None)
+    if attr and inspect.isclass(attr):
+        return attr
 
 
-@app.route('/person/<uuid:person_id>', methods=['GET'])
-@db_transaction
-def person(person_id):
-    p = Person[person_id]
-    if p:
-        return jsonify(p.to_dict(with_collections=True))
-    else:
+@app.route('/entity/<str:entity_type>', methods=['GET'])
+def get_entities(entity_type):
+    entity_class = get_entity_class(entity_type)
+    if not entity_class:
+        return 400
+    with db.db_transaction:
+        return jsonify([entity.to_dict(with_collections=True) for entity in entity_class.select()])
+
+
+@app.route('/entity/<str:entity_type>/<uuid:entity_id>', methods=['GET'])
+def get_entity(entity_type, entity_id):
+    entity_class = get_entity_class(entity_type)
+    if not entity_class:
+        return 400
+    entity = entity_class[entity_id]
+    if not entity:
         return 404
+    with db.db_transaction:
+        return jsonify(entity.to_dict(with_collections=True))
+
+
+@app.route('/entity/<str:entity_type>/<uuid:entity_id>', methods=['DELETE'])
+def delete_entity(entity_type, entity_id):
+    entity_class = get_entity_class(entity_type)
+    if not entity_class:
+        return 400
+    entity = entity_class[entity_id]
+    if not entity:
+        return 404
+    with db.db_transaction:
+        entity.delete()
+
+
+@app.route('/entity/<str:entity_type>', methods=['POST'])
+def post_entity(entity_type):
+    entity_class = get_entity_class(entity_type)
+    if not entity_class:
+        return 400
+    with db.db_transaction:
+        entity_class(**request.form.to_dict())
 
 
 class FaceRecognitionWebApp(CLI):
@@ -48,7 +82,7 @@ class FaceRecognitionWebApp(CLI):
             (kv.split('=') for kv in args.frwa_db_connection_params.split(',')))
 
         logger.debug('final args: %s', args)
-        with db_connection(**args.frwa_db_connection_params):
+        with db.db_connection(**args.frwa_db_connection_params):
             app.run(host=args.frwa_host, port=args.frwa_port,
                     debug=args.frwa_debug)
 
