@@ -21,7 +21,7 @@ def get_entity_class(entity_type):
         return attr
 
 
-@app.route('/entity/<str:entity_type>', methods=['GET'])
+@app.route('/entity/<entity_type>', methods=['GET'])
 def get_entities(entity_type):
     entity_class = get_entity_class(entity_type)
     if not entity_class:
@@ -30,37 +30,41 @@ def get_entities(entity_type):
         return jsonify([entity.to_dict(with_collections=True) for entity in entity_class.select()])
 
 
-@app.route('/entity/<str:entity_type>/<uuid:entity_id>', methods=['GET'])
+@app.route('/entity/<entity_type>/<uuid:entity_id>', methods=['GET'])
 def get_entity(entity_type, entity_id):
     entity_class = get_entity_class(entity_type)
     if not entity_class:
         return 400
-    entity = entity_class[entity_id]
-    if not entity:
-        return 404
     with db.db_transaction:
-        return jsonify(entity.to_dict(with_collections=True))
+        entity = entity_class[entity_id]
+        if entity:
+            return jsonify(entity.to_dict(with_collections=True))
+        else:
+            return 404
 
 
-@app.route('/entity/<str:entity_type>/<uuid:entity_id>', methods=['DELETE'])
+@app.route('/entity/<entity_type>/<uuid:entity_id>', methods=['DELETE'])
 def delete_entity(entity_type, entity_id):
     entity_class = get_entity_class(entity_type)
     if not entity_class:
         return 400
-    entity = entity_class[entity_id]
-    if not entity:
-        return 404
     with db.db_transaction:
-        entity.delete()
+        entity = entity_class[entity_id]
+        if entity:
+            entity.delete()
+            return 410 # Gone
+        else:
+            return 404
 
 
-@app.route('/entity/<str:entity_type>', methods=['POST'])
+@app.route('/entity/<entity_type>', methods=['POST'])
 def post_entity(entity_type):
     entity_class = get_entity_class(entity_type)
     if not entity_class:
         return 400
     with db.db_transaction:
-        entity_class(**request.form.to_dict())
+        entity = entity_class(**request.form.to_dict())
+        return jsonify(entity.to_dict(with_collections=True))
 
 
 class FaceRecognitionWebApp(CLI):
