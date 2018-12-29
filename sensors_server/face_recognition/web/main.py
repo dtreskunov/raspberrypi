@@ -76,6 +76,15 @@ def post_entity(entity_type):
     return jsonify(_to_dict(entity))
 
 
+@app.route('/untagged_image_ids', methods=['GET'])
+@db.db_transaction
+def get_untagged_image_ids():
+    return jsonify(
+        [str(id) for id in db.select(
+            image.id for image in db.Image if image in (db.select(
+                df.image for df in db.DetectedFace if df.person is None)))])
+
+
 class FaceRecognitionWebApp(CLI):
     def __init__(self, parser=None):
         super().__init__(parser)

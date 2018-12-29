@@ -34,7 +34,7 @@
         </md-list>
       </md-app-drawer>
       <md-app-content>
-        <!--  -->
+        <image v-if="image" v-bind:src="image.data_uri" v-bind:width="image.width" v-bind:height="image.height"></image>
       </md-app-content>
     </md-app>
   </div>
@@ -47,13 +47,27 @@
 
     new Vue({
       el: '#app',
-      data() {
-        return {
-          persons: null,
-        }
+      data: {
+        persons: null,
+        imageIds: null,
+        imageId: null,
+        image: null,
       },
       mounted() {
         this.getPersons()
+        this.getImageIds()
+      },
+      watch: {
+        imageId(newId, oldId) {
+          if (!newId) {
+            return
+          }
+          axios
+            .get('/entity/Image/' + newId)
+            .then(response => {
+              this.image = response.data
+            })
+        }
       },
       methods: {
         getPersons() {
@@ -61,6 +75,17 @@
             .get('/entity/Person')
             .then(response => {
               this.persons = response.data
+            })
+            .catch(error => {
+              console.log(error)
+            })
+        },
+        getImageIds() {
+          axios
+            .get('/untagged_image_ids')
+            .then(response => {
+              this.imageIds = response.data
+              this.imageId = this.imageIds[0]
             })
             .catch(error => {
               console.log(error)

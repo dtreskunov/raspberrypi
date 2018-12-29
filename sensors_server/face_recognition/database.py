@@ -9,6 +9,7 @@ from pony import orm
 db = orm.Database()
 db_transaction = orm.db_session
 db_rollback = orm.rollback
+select = orm.select
 
 logger = logging.getLogger(__name__)
 
