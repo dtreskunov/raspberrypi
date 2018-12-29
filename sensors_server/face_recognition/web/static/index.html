@@ -1,26 +1,88 @@
 <!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta content="width=device-width,initial-scale=1,minimal-ui" name="viewport">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700,400italic|Material+Icons">
-    <link rel="stylesheet" href="https://unpkg.com/vue-material@beta/dist/vue-material.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/vue-material@beta/dist/theme/default.css">
-  </head>
 
-  <body>
-    <div id="app">
-      <!-- Your code here -->
-    </div>
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width,initial-scale=1,minimal-ui" name="viewport">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700,400italic|Material+Icons">
+  <link rel="stylesheet" href="https://unpkg.com/vue-material/dist/vue-material.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/vue-material/dist/theme/default.css">
+  <style>
+  </style>
+</head>
 
-    <script src="https://unpkg.com/vue"></script>
-    <script src="https://unpkg.com/vue-material@beta"></script>
-    <script>
-      Vue.use(VueMaterial.default)
+<body>
+  <div id="app">
+    <md-app>
+      <md-app-drawer md-permanent="full">
+        <md-toolbar class="md-transparent" md-elevation="0">
+          People
+        </md-toolbar>
+        <md-list>
+          <md-list-item v-for="person in persons" v-bind:key="person.id">
+            <md-chip v-bind:title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
+              md-deletable v-on:md-delete="deletePerson(person.id)">
+              {{person.name}}
+            </md-chip>
+          </md-list-item>
+          <md-list-item>
+            <md-field md-inline md-clearable>
+              <label>New person...</label>
+              <md-input v-on:keyup.enter="newPerson($event.target.value)"></md-input>
+            </md-field>
+          </md-list-item>
+        </md-list>
+      </md-app-drawer>
+      <md-app-content>
+        <!--  -->
+      </md-app-content>
+    </md-app>
+  </div>
 
-      new Vue({
-        el: '#app'
-      })
-    </script>
-  </body>
+  <script src="https://unpkg.com/vue"></script>
+  <script src="https://unpkg.com/vue-material"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script>
+    Vue.use(VueMaterial.default)
+
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          persons: null,
+        }
+      },
+      mounted() {
+        this.getPersons()
+      },
+      methods: {
+        getPersons() {
+          axios
+            .get('/entity/Person')
+            .then(response => {
+              this.persons = response.data
+            })
+            .catch(error => {
+              console.log(error)
+            })
+        },
+        newPerson(name) {
+          axios
+            .post('/entity/Person', { name: name })
+            .then(response => {
+              this.persons.push(response.data)
+            })
+        },
+        deletePerson(id) {
+          axios
+            .delete('/entity/Person/' + id)
+            .then(response => {
+              this.persons = this.persons.filter(p => p.id != id)
+            })
+        }
+      },
+    })
+  </script>
+</body>
+
 </html>

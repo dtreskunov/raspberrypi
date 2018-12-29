@@ -2,8 +2,10 @@ import inspect
 import logging
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import BadRequest, NotFound
 
 import face_recognition.database as db
+from face_recognition.image import MyImage
 from util import CLI
 
 logger = logging.getLogger(__name__)
@@ -15,56 +17,63 @@ def index():
     return app.send_static_file('index.html')
 
 
-def get_entity_class(entity_type):
-    attr = getattr(db, entity_type.title(), None)
-    if attr and inspect.isclass(attr):
-        return attr
+def _get_entity_class(entity_type):
+    attr = getattr(db, entity_type, None)
+    if not attr or not inspect.isclass(attr):
+        raise BadRequest('Entity type "{}" is invalid'.format(entity_type))
+    return attr
+
+
+def _get_entity(entity_type, entity_id):
+    entity_class = _get_entity_class(entity_type)
+    entity = entity_class[entity_id]
+    if not entity:
+        raise NotFound('Entity "{}" with id "{}" not found'.format(
+            entity_type, entity_id))
+    return entity
+
+
+def _to_dict(entity):
+    d = None
+    if isinstance(entity, db.Image):
+        d = entity.to_dict(with_collections=True)
+        data = d['data']
+        del d['data']
+        d['data_uri'] = MyImage(_bytes=data).data_uri
+    elif isinstance(entity, db.DetectedFace):
+        d = entity.to_dict(with_collections=True, exclude=['descriptor'])
+    else:
+        d = entity.to_dict(with_collections=True)
+    return d
 
 
 @app.route('/entity/<entity_type>', methods=['GET'])
+@db.db_transaction
 def get_entities(entity_type):
-    entity_class = get_entity_class(entity_type)
-    if not entity_class:
-        return 400
-    with db.db_transaction:
-        return jsonify([entity.to_dict(with_collections=True) for entity in entity_class.select()])
+    entity_class = _get_entity_class(entity_type)
+    return jsonify([_to_dict(entity) for entity in entity_class.select()])
 
 
 @app.route('/entity/<entity_type>/<uuid:entity_id>', methods=['GET'])
+@db.db_transaction
 def get_entity(entity_type, entity_id):
-    entity_class = get_entity_class(entity_type)
-    if not entity_class:
-        return 400
-    with db.db_transaction:
-        entity = entity_class[entity_id]
-        if entity:
-            return jsonify(entity.to_dict(with_collections=True))
-        else:
-            return 404
+    return jsonify(_to_dict(_get_entity(entity_type, entity_id)))
 
 
 @app.route('/entity/<entity_type>/<uuid:entity_id>', methods=['DELETE'])
+@db.db_transaction
 def delete_entity(entity_type, entity_id):
-    entity_class = get_entity_class(entity_type)
-    if not entity_class:
-        return 400
-    with db.db_transaction:
-        entity = entity_class[entity_id]
-        if entity:
-            entity.delete()
-            return 410 # Gone
-        else:
-            return 404
+    entity = _get_entity(entity_type, entity_id)
+    entity.delete()
+    return 'Entity "{}" with id "{}" deleted'.format(entity_type, entity_id)
 
 
 @app.route('/entity/<entity_type>', methods=['POST'])
+@db.db_transaction
 def post_entity(entity_type):
-    entity_class = get_entity_class(entity_type)
-    if not entity_class:
-        return 400
-    with db.db_transaction:
-        entity = entity_class(**request.form.to_dict())
-        return jsonify(entity.to_dict(with_collections=True))
+    entity_class = _get_entity_class(entity_type)
+    entity = entity_class(**request.get_json())
+    return jsonify(_to_dict(entity))
 
 
 class FaceRecognitionWebApp(CLI):
