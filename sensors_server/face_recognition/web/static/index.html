@@ -18,23 +18,10 @@
         <md-toolbar class="md-transparent" md-elevation="0">
           People
         </md-toolbar>
-        <md-list>
-          <md-list-item v-for="person in persons" v-bind:key="person.id">
-            <md-chip v-bind:title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
-              md-deletable v-on:md-delete="deletePerson(person.id)">
-              {{person.name}}
-            </md-chip>
-          </md-list-item>
-          <md-list-item>
-            <md-field md-inline md-clearable>
-              <label>New person...</label>
-              <md-input v-on:keyup.enter="newPerson($event.target.value)"></md-input>
-            </md-field>
-          </md-list-item>
-        </md-list>
+        <frwa-people />
       </md-app-drawer>
       <md-app-content>
-        <image v-if="image" v-bind:src="image.data_uri" v-bind:width="image.width" v-bind:height="image.height"></image>
+        <frwa-images />
       </md-app-content>
     </md-app>
   </div>
@@ -42,70 +29,165 @@
   <script src="https://unpkg.com/vue"></script>
   <script src="https://unpkg.com/vue-material"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-  <script>
-    Vue.use(VueMaterial.default)
 
-    new Vue({
-      el: '#app',
-      data: {
-        persons: null,
-        imageIds: null,
-        imageId: null,
-        image: null,
-      },
-      mounted() {
-        this.getPersons()
-        this.getImageIds()
-      },
-      watch: {
-        imageId(newId, oldId) {
-          if (!newId) {
-            return
-          }
-          axios
-            .get('/entity/Image/' + newId)
-            .then(response => {
-              this.image = response.data
-            })
+  <!-- <frwa-people> -->
+  <script type="text/x-template" id="frwa-people-template">
+    <md-list>
+      <md-list-item v-for="person in people" v-bind:key="person.id">
+        <md-chip v-bind:title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
+          md-deletable v-on:md-delete="deletePerson(person.id)">
+          {{person.name}}
+        </md-chip>
+      </md-list-item>
+      <md-list-item>
+        <md-field md-inline md-clearable>
+          <label>New person...</label>
+          <md-input v-model="newPersonName" @keyup.enter="newPerson"></md-input>
+        </md-field>
+      </md-list-item>
+    </md-list>
+  </script>
+  <script>
+    Vue.component('frwa-people', {
+      template: '#frwa-people-template',
+      data() {
+        return {
+          people: null,
+          newPersonName: null,
         }
       },
+      mounted() {
+        this.getPeople()
+      },
       methods: {
-        getPersons() {
+        getPeople() {
           axios
             .get('/entity/Person')
             .then(response => {
-              this.persons = response.data
-            })
-            .catch(error => {
-              console.log(error)
-            })
-        },
-        getImageIds() {
-          axios
-            .get('/untagged_image_ids')
-            .then(response => {
-              this.imageIds = response.data
-              this.imageId = this.imageIds[0]
+              this.people = response.data
             })
             .catch(error => {
               console.log(error)
             })
         },
         newPerson(name) {
+          if (!this.newPersonName) return
+          var name = this.newPersonName
+          this.newPersonName = null
           axios
             .post('/entity/Person', { name: name })
             .then(response => {
-              this.persons.push(response.data)
+              this.people.push(response.data)
             })
         },
         deletePerson(id) {
           axios
             .delete('/entity/Person/' + id)
             .then(response => {
-              this.persons = this.persons.filter(p => p.id != id)
+              this.people = this.people.filter(p => p.id != id)
             })
+        },
+      }
+    })
+  </script>
+
+  <!-- <frwa-image> -->
+  <script type="text/x-template" id="frwa-images-template">
+    <div @keyup.left="prevImage" @keyup.right="nextImage" tabindex="0">
+      <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
+        <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
+        <rect v-for="face in faces" v-bind:key="face.id" :x="face.image_region.left" :y="face.image_region.top"
+          :width="face.image_region.right - face.image_region.left" :height="face.image_region.bottom - face.image_region.top"
+          fill="none" stroke="red" stroke-width="2" />
+        <template v-for="face in faces" v-bind:key="face.id">
+          <polyline :points="points.map(p=>p[0]+','+p[1]).join(' ')"
+            v-for="(points, label) in face.labeled_landmarks" v-bind:key="face.id + label"
+            fill="none" stroke="red" />
+        </template>
+      </svg>
+      <span v-on:click="prevImage"><md-icon>chevron_left</md-icon></span>
+      {{this.imageIndex + 1}} of {{this.imageCount}}
+      <span v-on:click="nextImage"><md-icon>chevron_right</md-icon></span>
+    </div>
+  </script>
+  <script>
+    Vue.component('frwa-images', {
+      template: '#frwa-images-template',
+      data() {
+        return {
+          imageIds: null,
+          imageIndex: null,
+          image: null,
+          faces: null,
         }
       },
+      mounted() {
+        this.getImageIds()
+      },
+      computed: {
+        imageId() {
+          if (!this.imageIds || this.imageIndex === null) return null
+          return this.imageIds[this.imageIndex]
+        },
+        imageCount() {
+          if (!this.imageIds) return null
+          return this.imageIds.length
+        },
+      },
+      watch: {
+        imageId(newId, oldId) {
+          if (!newId) return
+          axios
+            .get('/entity/Image/' + newId)
+            .then(response => {
+              this.image = response.data
+            })
+        },
+        image(newImage, oldImage) {
+          if (!newImage) return
+          this.faces = null
+          axios
+            .all(newImage.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
+            .then(responses => {
+              this.faces = responses.map(response => response.data)
+            })
+        },
+      },
+      methods: {
+        getImageIds() {
+          axios
+            .get('/untagged_image_ids')
+            .then(response => {
+              this.imageIds = response.data
+              this.imageIndex = this.imageIds ? 0 : null
+            })
+            .catch(error => {
+              console.log(error)
+            })
+        },
+        prevImage() {
+          if (this.imageIndex === 0) {
+            this.imageIndex = this.imageCount - 1
+          } else {
+            this.imageIndex--
+          }
+        },
+        nextImage() {
+          if (this.imageIndex === this.imageCount - 1) {
+            this.imageIndex = 0
+          } else {
+            this.imageIndex++
+          }
+        },
+      },
+    })
+  </script>
+
+  <script>
+    Vue.use(VueMaterial.default)
+
+    new Vue({
+      el: '#app',
     })
   </script>
 </body>
