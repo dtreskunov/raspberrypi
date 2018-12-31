@@ -33,11 +33,14 @@
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
     <md-list>
-      <md-list-item v-for="person in people" v-bind:key="person.id">
-        <md-chip v-bind:title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
-          md-deletable v-on:md-delete="deletePerson(person.id)">
-          {{person.name}}
-        </md-chip>
+      <md-list-item>
+        <div>
+          <md-chip v-for="person in people" :key="person.id"
+            :title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
+            md-deletable @md-delete="deletePerson(person.id)">
+            {{person.name}}
+          </md-chip>
+        </div>
       </md-list-item>
       <md-list-item>
         <md-field md-inline md-clearable>
@@ -96,14 +99,14 @@
     <div @keyup.left="prevImage" @keyup.right="nextImage" tabindex="0">
       <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
         <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
-        <rect v-for="face in faces" v-bind:key="face.id" :x="face.image_region.left" :y="face.image_region.top"
+        <rect v-for="face in faces" v-bind:key="'rect' + face.id" :x="face.image_region.left" :y="face.image_region.top"
           :width="face.image_region.right - face.image_region.left" :height="face.image_region.bottom - face.image_region.top"
           fill="none" stroke="red" stroke-width="2" />
-        <template v-for="face in faces" v-bind:key="face.id">
+        <g v-for="face in faces" v-bind:key="'g' + face.id">
           <polyline :points="points.map(p=>p[0]+','+p[1]).join(' ')"
             v-for="(points, label) in face.labeled_landmarks" v-bind:key="face.id + label"
             fill="none" stroke="red" />
-        </template>
+        </g>
       </svg>
       <span v-on:click="prevImage"><md-icon>chevron_left</md-icon></span>
       {{this.imageIndex + 1}} of {{this.imageCount}}
