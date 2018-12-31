@@ -102,20 +102,16 @@
   <!-- <frwa-image> -->
   <script type="text/x-template" id="frwa-images-template">
     <div @keyup.left="prevImage" @keyup.right="nextImage" tabindex="0">
-      <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
-        <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
-        <frwa-svg-face v-for="face in faces" :key="face.id"
-          :face="face" @update:face="onUpdateFace" />
-        <!-- <rect v-for="face in faces" v-bind:key="'rect' + face.id" :x="face.image_region.left" :y="face.image_region.top"
-          :width="face.image_region.right - face.image_region.left" :height="face.image_region.bottom - face.image_region.top"
-          fill="white" fill-opacity="0" stroke="red" stroke-width="2"
-          @dragover.prevent="faceDragOver(face.id, $event)" />
-        <g v-for="face in faces" v-bind:key="'g' + face.id">
-          <polyline :points="points.map(p=>p[0]+','+p[1]).join(' ')"
-            v-for="(points, label) in face.labeled_landmarks" v-bind:key="face.id + label"
-            fill="none" stroke="red" />
-        </g> -->
-      </svg>
+      <div style="position:relative">
+        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="deleteImage">
+          <md-icon>delete</md-icon>Bad detection?
+        </md-button>
+        <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
+          <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
+          <frwa-svg-face v-for="face in faces" :key="face.id"
+            :face="face" @update:face="onUpdateFace" />
+        </svg>
+      </div>
       <span v-on:click="prevImage"><md-icon>chevron_left</md-icon></span>
       {{this.imageIndex + 1}} of {{this.imageCount}}
       <span v-on:click="nextImage"><md-icon>chevron_right</md-icon></span>
@@ -198,6 +194,17 @@
           }
           // Help Vue detect a change inside of an array: https://vuejs.org/v2/guide/list.html#Caveats
           this.faces.splice(index, 1, face)
+        },
+        deleteImage(event) {
+          if (!this.image) return
+          let imageId = this.image.id
+          let imageIndex = this.imageIds.indexOf(imageId)
+          axios
+            .delete('/entity/Image/' + imageId)
+            .then(() => {
+              this.imageIds.splice(imageIndex, 1)
+              this.imageIndex = Math.min(this.imageIds.length - 1, this.imageIndex)
+            })
         },
       },
     })

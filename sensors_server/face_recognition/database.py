@@ -37,8 +37,8 @@ class DetectedFace(db.Entity):
     id = orm.PrimaryKey(uuid_lib.UUID, default=uuid_lib.uuid4)
     created_at = orm.Required(
         datetime.datetime, sql_default='CURRENT_TIMESTAMP')
-    image = orm.Optional(lambda: Image)
-    image_region = orm.Optional(orm.Json)  # [left, top, right, bottom]
+    image = orm.Required(lambda: Image)
+    image_region = orm.Required(orm.Json)  # [left, top, right, bottom]
     descriptor = orm.Optional(orm.Json)  # float[128]
     labeled_landmarks = orm.Optional(orm.Json)  # {"left_eye":[(123,456)]}
     face_score = orm.Optional(float)
