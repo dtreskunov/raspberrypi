@@ -25,33 +25,50 @@
 
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <md-list>
-      <md-list-item>
-        <div>
-          <md-chip v-for="person in people" :key="person.id"
-            :title="'Created: ' + person.created_at + ', faces: ' + person.detected_faces.length"
-            md-deletable @md-delete="deletePerson(person.id)">
-            <div draggable @dragstart="dragStart(person.id, $event)">
-              {{person.name}}
-            </div>
-          </md-chip>
+    <md-chips v-model="names" md-placeholder="Add person...">
+      <template slot="md-chip" slot-scope="{ chip }">
+        <div draggable @dragstart="dragStart(chip, $event)">
+          {{ format(chip) }}
         </div>
-      </md-list-item>
-      <md-list-item>
-        <md-field md-inline md-clearable>
-          <label>New person...</label>
-          <md-input v-model="newPersonName" @keyup.enter="newPerson"></md-input>
-        </md-field>
-      </md-list-item>
-    </md-list>
+      </template>
+      <div class="md-helper-text">Choose a person &amp; tag their face in the photo</div>
+    </md-chips>
   </script>
   <script>
     Vue.component('frwa-people', {
       template: '#frwa-people-template',
+      computed: {
+        names: {
+          get() {
+            return Object.keys(this.nameToPerson)
+          },
+          set(names) {
+            let oldNames = new Set(Object.keys(this.nameToPerson))
+            let newNames = new Set(names)
+            let additions = [...newNames].filter(name => !oldNames.has(name))
+            let removals = [...oldNames].filter(name => !newNames.has(name))
+
+            additions.forEach(name => {
+              this.newPerson(name)
+            })
+            if (removals.length > 0 && window.confirm(`Really delete ${removals.join(', ')}?`)) {
+              removals.forEach(name => {
+                this.deletePerson(name)
+              })
+            }
+          }
+        },
+        nameToPerson() {
+          const reducer = (acc, person) => {
+            acc[person.name] = person
+            return acc
+          }
+          return this.people.reduce(reducer, {})
+        },
+      },
       data() {
         return {
-          people: null,
-          newPersonName: null,
+          people: [],
         }
       },
       mounted() {
@@ -69,24 +86,33 @@
             })
         },
         newPerson(name) {
-          if (!this.newPersonName) return
-          var name = this.newPersonName
-          this.newPersonName = null
           axios
             .post('/entity/Person', { name: name })
             .then(response => {
               this.people.push(response.data)
             })
         },
-        deletePerson(id) {
+        deletePerson(name) {
+          let person = this.nameToPerson[name]
+          if (!person) return
           axios
-            .delete('/entity/Person/' + id)
+            .delete('/entity/Person/' + person.id)
             .then(response => {
-              this.people = this.people.filter(p => p.id != id)
+              this.people = this.people.filter(p => p.id !== person.id)
             })
         },
-        dragStart(id, event) {
-          event.dataTransfer.setData('text/plain', 'person_id=' + id)
+        dragStart(name, event) {
+          let person = this.nameToPerson[name]
+          if (!person) return false
+          event.dataTransfer.setData('text/plain', 'person_id=' + person.id)
+        },
+        format(name) {
+          let person = this.nameToPerson[name]
+          if (person) {
+            return `${person.name} (${person.detected_faces.length})`
+          } else {
+            return name
+          }
         },
       }
     })
@@ -180,7 +206,7 @@
           }
         },
         onUpdateFace(face) {
-          var index = this.faces.findIndex(f => f.id===face.id)
+          var index = this.faces.findIndex(f => f.id === face.id)
           if (index === -1) {
             console.warn('frwa-images doesn\'t know about face with id ' + face.id)
             return
@@ -246,7 +272,7 @@
       },
     })
   </script>
-    
+
   <script>
     Vue.use(VueMaterial.default)
 
