@@ -85,6 +85,23 @@ def get_untagged_image_ids():
                 df.image for df in db.DetectedFace if df.person is None)))])
 
 
+@app.route('/link_face_to_person', methods=['POST'])
+def link_face_to_person():
+    payload = request.get_json()
+    if not payload:
+        raise BadRequest
+    face_id = payload.get('face_id', None)
+    person_id = payload.get('person_id', None)
+    if not face_id or not person_id:
+        raise BadRequest('Either "face_id" or "person_id" not found in request payload')
+    with db.db_transaction:
+        face = db.DetectedFace[face_id]
+        if not face:
+            raise NotFound('Face with id "{}" not found'.format(face_id))
+        face.person = person_id
+        return jsonify(_to_dict(face))
+
+
 class FaceRecognitionWebApp(CLI):
     def __init__(self, parser=None):
         super().__init__(parser)
