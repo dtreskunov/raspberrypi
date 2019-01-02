@@ -15,19 +15,61 @@
   <div id="app">
     <md-content>
       <frwa-images></frwa-images>
-      <frwa-people></frwa-people>
+      <frwa-people style="padding:5px"></frwa-people>
+      <frwa-snackbar></frwa-snackbar>
+      <frwa-progress-bar></frwa-progress-bar>
     </md-content>
   </div>
 
   <script src="https://unpkg.com/vue"></script>
+  <script src="https://unpkg.com/vuex"></script>
   <script src="https://unpkg.com/vue-material"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
+  <!-- <frwa-snackbar> -->
+  <script type="text/x-template" id="frwa-snackbar-template">
+    <md-snackbar md-position="center" :md-active.sync="active" md-persistent>
+      <span>{{ message }}</span>
+      <md-button class="md-primary" @click="close">Close</md-button>
+    </md-snackbar>
+  </script>
+  <script>
+    Vue.component('frwa-snackbar', {
+      template: '#frwa-snackbar-template',
+      data: () => ({
+        active: false,
+        message: null,
+      }),
+      mounted() {
+        this.$store.watch((state) => state.lastError, (lastError) => {
+          this.message = lastError
+          this.active = true
+        })
+      },
+      methods: {
+        close() {
+          this.active = false
+        },
+      },
+    })
+  </script>
+
+  <!-- <frwa-progress-bar> -->
+  <script type="text/x-template" id="frwa-progress-bar-template">
+    <md-progress-bar md-mode="query" v-if="busy" style="position:fixed;top:0;width:100%"></md-progress-bar>
+  </script>
+  <script>
+    Vue.component('frwa-progress-bar', {
+      template: '#frwa-progress-bar-template',
+      computed: Vuex.mapGetters(['busy']),
+    })
+  </script>
+
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <md-chips v-model="names" md-placeholder="Add person...">
+    <md-chips v-model="names" md-placeholder="Add person..." @md-delete="onDelete" @md-insert="onInsert">
       <template slot="md-chip" slot-scope="{ chip }">
-        <div draggable @dragstart="dragStart(chip, $event)">
+        <div draggable @dragstart="onDragStart(chip, $event)">
           {{ format(chip) }}
         </div>
       </template>
@@ -37,82 +79,41 @@
   <script>
     Vue.component('frwa-people', {
       template: '#frwa-people-template',
-      computed: {
-        names: {
-          get() {
-            return Object.keys(this.nameToPerson)
-          },
-          set(names) {
-            let oldNames = new Set(Object.keys(this.nameToPerson))
-            let newNames = new Set(names)
-            let additions = [...newNames].filter(name => !oldNames.has(name))
-            let removals = [...oldNames].filter(name => !newNames.has(name))
-
-            additions.forEach(name => {
-              this.newPerson(name)
-            })
-            if (removals.length > 0 && window.confirm(`Really delete ${removals.join(', ')}?`)) {
-              removals.forEach(name => {
-                this.deletePerson(name)
-              })
-            }
-          }
-        },
-        nameToPerson() {
-          const reducer = (acc, person) => {
-            acc[person.name] = person
-            return acc
-          }
-          return this.people.reduce(reducer, {})
-        },
-      },
       data() {
         return {
-          people: [],
+          names: []
         }
       },
       mounted() {
-        this.getPeople()
+        this.$store.watch((_, getters) => getters.names, () => this.resetNames())
+        this.$store.dispatch('refreshPeople')
       },
       methods: {
-        getPeople() {
-          axios
-            .get('/entity/Person')
-            .then(response => {
-              this.people = response.data
-            })
-            .catch(error => {
-              console.log(error)
-            })
-        },
-        newPerson(name) {
-          axios
-            .post('/entity/Person', { name: name })
-            .then(response => {
-              this.people.push(response.data)
-            })
-        },
-        deletePerson(name) {
-          let person = this.nameToPerson[name]
-          if (!person) return
-          axios
-            .delete('/entity/Person/' + person.id)
-            .then(response => {
-              this.people = this.people.filter(p => p.id !== person.id)
-            })
-        },
-        dragStart(name, event) {
-          let person = this.nameToPerson[name]
+        onDragStart(name, event) {
+          let person = this.$store.getters.personByName[name]
           if (!person) return false
           event.dataTransfer.setData('text/plain', 'person_id=' + person.id)
         },
         format(name) {
-          let person = this.nameToPerson[name]
+          let person = this.$store.getters.personByName[name]
           if (person) {
             return `${person.name} (${person.detected_faces.length})`
           } else {
             return name
           }
+        },
+        onDelete(name) {
+          this.resetNames()
+          if (window.confirm(`Really delete ${name}?`)) {
+            this.$store.dispatch('deletePerson', { name })
+          }
+        },
+        onInsert(name) {
+          this.resetNames()
+          this.$store.dispatch('newPerson', { name })
+        },
+        resetNames() {
+          this.names = [...this.$store.getters.names]
         },
       }
     })
@@ -120,20 +121,25 @@
 
   <!-- <frwa-image> -->
   <script type="text/x-template" id="frwa-images-template">
-    <div @keyup.left="prevImage" @keyup.right="nextImage" tabindex="0">
+    <md-empty-state
+      v-if="!image"
+      md-icon="devices_other"
+      md-label="No unidentified faces!"
+      md-description="Let the camera capture a few mugshots, then come back and tag your friends to allow face recognition to work!">
+    </md-empty-state>
+    <div v-else @keyup.left="prev" @keyup.right="next" tabindex="0">
       <div style="position:relative">
-        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="deleteImage">
+        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="onDelete">
           <md-icon>delete</md-icon>Bad detection?
         </md-button>
         <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
           <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
-          <frwa-svg-face v-for="face in faces" :key="face.id"
-            :face="face" @update:face="onUpdateFace" />
+          <frwa-svg-face v-for="face in image.detected_faces" :key="face.id" :face="face" />
         </svg>
       </div>
-      <span v-on:click="prevImage"><md-icon>chevron_left</md-icon></span>
-      {{this.imageIndex + 1}} of {{this.imageCount}}
-      <span v-on:click="nextImage"><md-icon>chevron_right</md-icon></span>
+      <span v-on:click="prev"><md-icon>chevron_left</md-icon></span>
+      {{this.index + 1}} of {{this.count}}
+      <span v-on:click="next"><md-icon>chevron_right</md-icon></span>
     </div>
   </script>
   <script>
@@ -141,89 +147,61 @@
       template: '#frwa-images-template',
       data() {
         return {
-          imageIds: null,
-          imageIndex: null,
-          image: null,
-          faces: null,
+          index: null,
         }
       },
       mounted() {
-        this.getImageIds()
+        this.$store.watch(state => state.untaggedImageIds, () => this.ensureIndexIsValid())
+        this.$store.dispatch('refreshUntaggedImageIds')
       },
       computed: {
-        imageId() {
-          if (!this.imageIds || this.imageIndex === null) return null
-          return this.imageIds[this.imageIndex]
+        image() {
+          return this.$store.state.image
         },
-        imageCount() {
-          if (!this.imageIds) return null
-          return this.imageIds.length
+        ids() {
+          return this.$store.state.untaggedImageIds
+        },
+        id() {
+          return (this.ids && this.index !== null) ? this.ids[this.index] : null
+        },
+        count() {
+          return this.ids ? this.ids.length : null
         },
       },
       watch: {
-        imageId(newId, oldId) {
-          if (!newId) return
-          axios
-            .get('/entity/Image/' + newId)
-            .then(response => {
-              this.image = response.data
-            })
-        },
-        image(newImage, oldImage) {
-          if (!newImage) return
-          this.faces = null
-          axios
-            .all(newImage.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
-            .then(responses => {
-              this.faces = responses.map(response => response.data)
-            })
+        id(id, oldId) {
+          if (!id) return
+          this.$store.dispatch('loadImage', { id })
         },
       },
       methods: {
-        getImageIds() {
-          axios
-            .get('/untagged_image_ids')
-            .then(response => {
-              this.imageIds = response.data
-              this.imageIndex = this.imageIds ? 0 : null
-            })
-            .catch(error => {
-              console.log(error)
-            })
-        },
-        prevImage() {
-          if (this.imageIndex === 0) {
-            this.imageIndex = this.imageCount - 1
+        ensureIndexIsValid() {
+          if (this.ids && this.ids.length > 0) {
+            this.index = Math.max(this.index, 0)
+            this.index = Math.min(this.index, this.ids.length - 1)
           } else {
-            this.imageIndex--
+            this.index = null
           }
         },
-        nextImage() {
-          if (this.imageIndex === this.imageCount - 1) {
-            this.imageIndex = 0
+        prev() {
+          if (this.index === 0) {
+            this.index = this.count - 1
           } else {
-            this.imageIndex++
+            this.index--
           }
         },
-        onUpdateFace(face) {
-          var index = this.faces.findIndex(f => f.id === face.id)
-          if (index === -1) {
-            console.warn('frwa-images doesn\'t know about face with id ' + face.id)
-            return
+        next() {
+          if (this.index === this.count - 1) {
+            this.index = 0
+          } else {
+            this.index++
           }
-          // Help Vue detect a change inside of an array: https://vuejs.org/v2/guide/list.html#Caveats
-          this.faces.splice(index, 1, face)
         },
-        deleteImage(event) {
+        onDelete(event) {
           if (!this.image) return
-          let imageId = this.image.id
-          let imageIndex = this.imageIds.indexOf(imageId)
-          axios
-            .delete('/entity/Image/' + imageId)
-            .then(() => {
-              this.imageIds.splice(imageIndex, 1)
-              this.imageIndex = Math.min(this.imageIds.length - 1, this.imageIndex)
-            })
+          let id = this.image.id
+          let index = this.ids.indexOf(id)
+          this.$store.dispatch('deleteImage', { id })
         },
       },
     })
@@ -231,7 +209,7 @@
 
   <!-- <frwa-svg-face> -->
   <script type="text/x-template" id="frwa-svg-face-template">
-    <g @dragover.prevent="dragOver(face.id, $event)" @drop.prevent="drop(face.id, $event)">
+    <g @dragover.prevent="dragOver(face, $event)" @drop.prevent="drop(face, $event)">
       <rect :x="face.image_region.left" :y="face.image_region.top"
         :width="face.image_region.right - face.image_region.left" :height="face.image_region.bottom - face.image_region.top"
         fill="white" fill-opacity="0" stroke="red" stroke-width="2" />
@@ -246,28 +224,21 @@
       props: ['face'],
       methods: {
         getPersonId(event) {
-          var data = event.dataTransfer.getData("text/plain")
+          let data = event.dataTransfer.getData("text/plain")
           if (!data) return
-          var match = data.match("^person_id=(.*)")
+          let match = data.match("^person_id=(.*)")
           if (!match) return
           return match[1]
         },
-        dragOver(faceId, event) {
+        dragOver(face, event) {
           if (this.getPersonId(event)) {
             event.dataTransfer.dropEffect = 'link'
           }
         },
-        drop(faceId, event) {
-          var personId = this.getPersonId(event)
-          if (!personId) return
-          axios
-            .post('/link_face_to_person', {
-              face_id: faceId,
-              person_id: personId,
-            })
-            .then(result => {
-              this.$emit('update:face', result.data)
-            })
+        drop(face, event) {
+          let person = this.$store.state.personById[this.getPersonId(event)]
+          if (!person) return
+          this.$store.dispatch('linkFaceToPerson', { face, person })
         },
       },
     })
@@ -276,8 +247,153 @@
   <script>
     Vue.use(VueMaterial.default)
 
+    const store = new Vuex.Store({
+      strict: true,
+      state: {
+        countByAction: {},
+        lastError: null,
+        personById: {},
+        untaggedImageIds: [],
+        image: null,
+      },
+      getters: {
+        busy: state => {
+          let totalCount = Object.values(state.countByAction).reduce((a, b) => a + b, 0)
+          return totalCount > 0
+        },
+        personByName: state => {
+          const reducer = (acc, person) => {
+            return { ...acc, [person.name]: person }
+          }
+          return Object.values(state.personById).reduce(reducer, {})
+        },
+        names: (state, getters) => Object.keys(getters.personByName),
+      },
+      mutations: {
+        START_ACTION(state, { name }) {
+          let count = state.countByAction[name] || 0
+          state.countByAction = { ...state.countByAction, [name]: count + 1 }
+        },
+        STOP_ACTION(state, { name }) {
+          let count = state.countByAction[name] || 0
+          if (count < 1) {
+            throw Error(`Action ${name} stopped more times than started`)
+          }
+          state.countByAction = { ...state.countByAction, [name]: count - 1 }
+        },
+        SET_LAST_ERROR(state, { error }) {
+          state.lastError = error
+        },
+        SET_PEOPLE(state, { people }) {
+          const reducer = (acc, person) => {
+            return { ...acc, [person.id]: person }
+          }
+          state.personById = people.reduce(reducer, {})
+        },
+        ADD_PERSON(state, { person }) {
+          state.personById = { ...state.personById, [person.id]: person }
+        },
+        DELETE_PERSON(state, { id }) {
+          let personById = { ...state.personById }
+          delete personById[id]
+          state.personById = personById
+        },
+        SET_UNTAGGED_IMAGE_IDS(state, { untaggedImageIds }) {
+          state.untaggedImageIds = untaggedImageIds
+        },
+        SET_IMAGE(state, { image }) {
+          state.image = image
+        },
+        DELETE_IMAGE(state, { id }) {
+          state.untaggedImageIds = state.untaggedImageIds.filter(filteredId => filteredId !== id)
+          // if (state.image && state.image.id === id) {
+          //   state.image = null
+          // }
+        },
+        LINK_FACE_TO_PERSON(state, { face, person }) {
+          let updatedPerson = { ...person, detected_faces: [...person.detected_faces, face] }
+          state.personById = { ...state.personById, [person.id]: updatedPerson }
+        },
+      },
+      actions: {
+        async doAction({ commit }, { name, action, complete }) {
+          commit('START_ACTION', { name })
+          try {
+            complete(await action())
+          } catch ({ message }) {
+            commit('SET_LAST_ERROR', { error: `Action '${name}' failed. ${message}` })
+          } finally {
+            commit('STOP_ACTION', { name })
+          }
+        },
+        refreshPeople({ dispatch, commit }) {
+          dispatch('doAction', {
+            name: 'refreshPeople',
+            action: () => axios.get('/entity/Person'),
+            complete: result => commit('SET_PEOPLE', { people: result.data })
+          })
+        },
+        newPerson({ dispatch, commit }, { name }) {
+          dispatch('doAction', {
+            name: 'newPerson',
+            action: () => axios.post('/entity/Person', { name }),
+            complete: result => commit('ADD_PERSON', { person: result.data })
+          })
+        },
+        deletePerson({ dispatch, commit, getters }, { name }) {
+          let person = getters.personByName[name]
+          dispatch('doAction', {
+            name: 'deletePerson',
+            action: () => {
+              if (!person) throw Error(`Person named '${name}' not found`)
+              return axios.delete('/entity/Person/' + person.id)
+            },
+            complete: result => commit('DELETE_PERSON', { id: person.id })
+          })
+        },
+        refreshUntaggedImageIds({ dispatch, commit }) {
+          dispatch('doAction', {
+            name: 'refreshUntaggedImageIds',
+            action: () => axios.get('/untagged_image_ids'),
+            complete: result => commit('SET_UNTAGGED_IMAGE_IDS', { untaggedImageIds: result.data })
+          })
+        },
+        loadImage({ dispatch, commit }, { id }) {
+          dispatch('doAction', {
+            name: 'loadImage',
+            action: async () => {
+              let response = await axios.get('/entity/Image/' + id)
+              let image = response.data
+              let faceResponses = await axios.all(image.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
+              image.detected_faces = faceResponses.map(r => r.data)
+              return { image }
+            },
+            complete: ({ image }) => commit('SET_IMAGE', { image })
+          })
+        },
+        deleteImage({ dispatch, commit }, { id }) {
+          dispatch('doAction', {
+            name: 'deleteImage',
+            action: () => axios.delete('/entity/Image/' + id),
+            complete: result => commit('DELETE_IMAGE', { id })
+          })
+        },
+        linkFaceToPerson({ dispatch, commit }, { face, person }) {
+          dispatch('doAction', {
+            name: 'linkFaceToPerson',
+            action: () => axios.post('/link_face_to_person', {
+              face_id: face.id,
+              person_id: person.id,
+            }),
+            complete: () => commit('LINK_FACE_TO_PERSON', { face, person })
+          })
+        }
+      },
+    })
+
     new Vue({
       el: '#app',
+      store,
     })
   </script>
 </body>
