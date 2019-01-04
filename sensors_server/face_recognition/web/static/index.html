@@ -13,16 +13,14 @@
 
 <body>
   <div id="app">
-    <md-content>
-      <frwa-images></frwa-images>
-      <frwa-people style="padding:5px"></frwa-people>
-      <frwa-snackbar></frwa-snackbar>
-      <frwa-progress-bar></frwa-progress-bar>
-    </md-content>
+    <frwa-progress-bar></frwa-progress-bar>
+    <frwa-snackbar></frwa-snackbar>
+    <router-view></router-view>
   </div>
 
   <script src="https://unpkg.com/vue"></script>
   <script src="https://unpkg.com/vuex"></script>
+  <script src="https://unpkg.com/vue-router"></script>
   <script src="https://unpkg.com/vue-material"></script>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
@@ -56,7 +54,7 @@
 
   <!-- <frwa-progress-bar> -->
   <script type="text/x-template" id="frwa-progress-bar-template">
-    <md-progress-bar md-mode="query" v-if="busy" style="position:fixed;top:0;width:100%"></md-progress-bar>
+    <md-progress-bar md-mode="query" v-if="busy" style="position:fixed;top:0;width:100%;z-index:10"></md-progress-bar>
   </script>
   <script>
     Vue.component('frwa-progress-bar', {
@@ -67,7 +65,7 @@
 
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <md-chips v-model="names" md-placeholder="Add person..." @md-delete="onDelete" @md-insert="onInsert">
+    <md-chips v-model="names" md-placeholder="Add person..." @md-delete="onDelete" @md-insert="onInsert" style="padding:5px">
       <template slot="md-chip" slot-scope="{ chip }">
         <div draggable @dragstart="onDragStart(chip, $event)">
           {{ format(chip) }}
@@ -86,7 +84,7 @@
       },
       mounted() {
         this.$store.watch((_, getters) => getters.names, () => this.resetNames())
-        this.$store.dispatch('refreshPeople')
+        this.$store.dispatch('loadPeople')
       },
       methods: {
         onDragStart(name, event) {
@@ -122,14 +120,14 @@
   <!-- <frwa-image> -->
   <script type="text/x-template" id="frwa-images-template">
     <md-empty-state
-      v-if="!image"
-      md-icon="devices_other"
-      md-label="No unidentified faces!"
+      v-if="ids.length === 0"
+      md-icon="tag_faces"
+      :md-label="noIdsLabel"
       md-description="Let the camera capture a few mugshots, then come back and tag your friends to allow face recognition to work!">
     </md-empty-state>
     <div v-else @keyup.left="prev" @keyup.right="next" tabindex="0">
       <div style="position:relative">
-        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="onDelete">
+        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="deleteImage">
           <md-icon>delete</md-icon>Bad detection?
         </md-button>
         <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
@@ -147,61 +145,105 @@
       template: '#frwa-images-template',
       data() {
         return {
-          index: null,
+          ids: [],
+          image: null,
         }
       },
-      mounted() {
-        this.$store.watch(state => state.untaggedImageIds, () => this.ensureIndexIsValid())
-        this.$store.dispatch('refreshUntaggedImageIds')
+      props: ['kind', 'id'],
+      async mounted() {
+        this.ids = await this.loadIds(this.kind)
+
+        return this.loadImage(this.determineId(this.id))
       },
       computed: {
-        image() {
-          return this.$store.state.image
-        },
-        ids() {
-          return this.$store.state.untaggedImageIds
-        },
-        id() {
-          return (this.ids && this.index !== null) ? this.ids[this.index] : null
+        index() {
+          return (this.ids && this.image) ? this.ids.indexOf(this.image.id) : null
         },
         count() {
           return this.ids ? this.ids.length : null
         },
-      },
-      watch: {
-        id(id, oldId) {
-          if (!id) return
-          this.$store.dispatch('loadImage', { id })
+        noIdsLabel() {
+          switch (this.kind) {
+            case 'untagged':
+              return 'No untagged faces!'
+            default:
+              return 'No images :('
+          }
         },
       },
       methods: {
-        ensureIndexIsValid() {
-          if (this.ids && this.ids.length > 0) {
-            this.index = Math.max(this.index, 0)
-            this.index = Math.min(this.index, this.ids.length - 1)
-          } else {
-            this.index = null
+        determineId(requestedId) {
+          if (this.ids && this.ids.includes(requestedId)) {
+            return requestedId
+          } else if (this.ids && this.ids.length > 0) {
+            return this.ids[0]
           }
+        },
+        async loadIds(kind) {
+          let result = await this.$store.dispatch('doAction', {
+            name: 'loadImageIds',
+            action: () => axios.get('/ids/Image' + (kind ? '/' + kind : ''))
+          })
+          return result.data
+        },
+        async loadImage(id) {
+          if (!id) {
+            this.image = null
+            return
+          }
+          if (this.image && this.image.id === id) return
+          this.image = await this.$store.dispatch('doAction', {
+            name: 'loadImage',
+            action: async () => {
+              let response = await axios.get('/entity/Image/' + id)
+              let image = response.data
+              let faceResponses = await Promise.all(image.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
+              image.detected_faces = faceResponses.map(r => r.data)
+              return image
+            }
+          })
+        },
+        async deleteImage() {
+          if (!this.image) return
+          await this.$store.dispatch('doAction', {
+            name: 'deleteImage',
+            action: () => axios.delete('/entity/Image/' + this.image.id),
+          })
+
+          let newIndex = this.index
+          this.ids = this.ids.filter(filteredId => filteredId !== this.image.id)
+          newIndex = Math.max(newIndex, this.ids.length - 1)
+          return this.loadImage(this.ids[newIndex])
         },
         prev() {
+          let newIndex
           if (this.index === 0) {
-            this.index = this.count - 1
+            newIndex = this.ids.length - 1
           } else {
-            this.index--
+            newIndex = this.index - 1
           }
+          this.loadImage(this.ids[newIndex])
         },
         next() {
-          if (this.index === this.count - 1) {
-            this.index = 0
+          let newIndex
+          if (this.index === this.ids.length - 1) {
+            newIndex = 0
           } else {
-            this.index++
+            newIndex = this.index + 1
           }
+          this.loadImage(this.ids[newIndex])
         },
-        onDelete(event) {
-          if (!this.image) return
-          let id = this.image.id
-          let index = this.ids.indexOf(id)
-          this.$store.dispatch('deleteImage', { id })
+        updateRoute(id) {
+          if (!this.$router) return
+          this.$router.push({ name: this.$route.name, params: { ...this.$route.params, id: id } })
+        },
+      },
+      watch: {
+        image: function (newImage, oldImage) {
+          this.updateRoute(newImage && newImage.id)
+        },
+        '$route.params.id': function (newId, oldId) {
+          this.loadImage(this.determineId(newId))
         },
       },
     })
@@ -245,7 +287,15 @@
   </script>
 
   <script>
+    Vue.use(Vuex)
+    Vue.use(VueRouter)
     Vue.use(VueMaterial.default)
+
+    // workaround for [1] until [2] gets merged into vue-material
+    // 1: https://github.com/vuematerial/vue-material/issues/1977
+    // 2: https://github.com/vuematerial/vue-material/pull/1978
+    Vue.component('router-link', Vue.options.components.RouterLink);
+    Vue.component('router-view', Vue.options.components.RouterView);
 
     const store = new Vuex.Store({
       strict: true,
@@ -253,8 +303,6 @@
         countByAction: {},
         lastError: null,
         personById: {},
-        untaggedImageIds: [],
-        image: null,
       },
       getters: {
         busy: state => {
@@ -298,102 +346,110 @@
           delete personById[id]
           state.personById = personById
         },
-        SET_UNTAGGED_IMAGE_IDS(state, { untaggedImageIds }) {
-          state.untaggedImageIds = untaggedImageIds
-        },
-        SET_IMAGE(state, { image }) {
-          state.image = image
-        },
-        DELETE_IMAGE(state, { id }) {
-          state.untaggedImageIds = state.untaggedImageIds.filter(filteredId => filteredId !== id)
-          // if (state.image && state.image.id === id) {
-          //   state.image = null
-          // }
-        },
         LINK_FACE_TO_PERSON(state, { face, person }) {
           let updatedPerson = { ...person, detected_faces: [...person.detected_faces, face] }
           state.personById = { ...state.personById, [person.id]: updatedPerson }
         },
       },
       actions: {
-        async doAction({ commit }, { name, action, complete }) {
+        async doAction({ commit }, { name, action }) {
           commit('START_ACTION', { name })
           try {
-            complete(await action())
-          } catch ({ message }) {
-            commit('SET_LAST_ERROR', { error: `Action '${name}' failed. ${message}` })
+            return await action()
+          } catch (e) {
+            commit('SET_LAST_ERROR', { error: `Action '${name}' failed. ${e.toString()}` })
+            throw e
           } finally {
             commit('STOP_ACTION', { name })
           }
         },
-        refreshPeople({ dispatch, commit }) {
-          dispatch('doAction', {
-            name: 'refreshPeople',
-            action: () => axios.get('/entity/Person'),
-            complete: result => commit('SET_PEOPLE', { people: result.data })
+        async loadPeople({ dispatch, commit }) {
+          let result = await dispatch('doAction', {
+            name: 'loadPeople',
+            action: () => axios.get('/entity/Person')
           })
+          commit('SET_PEOPLE', { people: result.data })
         },
-        newPerson({ dispatch, commit }, { name }) {
-          dispatch('doAction', {
+        async newPerson({ dispatch, commit }, { name }) {
+          let result = await dispatch('doAction', {
             name: 'newPerson',
-            action: () => axios.post('/entity/Person', { name }),
-            complete: result => commit('ADD_PERSON', { person: result.data })
+            action: () => axios.post('/entity/Person', { name })
           })
+          commit('ADD_PERSON', { person: result.data })
         },
-        deletePerson({ dispatch, commit, getters }, { name }) {
+        async deletePerson({ dispatch, commit, getters }, { name }) {
           let person = getters.personByName[name]
-          dispatch('doAction', {
+          let result = await dispatch('doAction', {
             name: 'deletePerson',
             action: () => {
               if (!person) throw Error(`Person named '${name}' not found`)
               return axios.delete('/entity/Person/' + person.id)
-            },
-            complete: result => commit('DELETE_PERSON', { id: person.id })
+            }
           })
+          commit('DELETE_PERSON', { id: person.id })
         },
-        refreshUntaggedImageIds({ dispatch, commit }) {
-          dispatch('doAction', {
-            name: 'refreshUntaggedImageIds',
-            action: () => axios.get('/untagged_image_ids'),
-            complete: result => commit('SET_UNTAGGED_IMAGE_IDS', { untaggedImageIds: result.data })
-          })
-        },
-        loadImage({ dispatch, commit }, { id }) {
-          dispatch('doAction', {
-            name: 'loadImage',
-            action: async () => {
-              let response = await axios.get('/entity/Image/' + id)
-              let image = response.data
-              let faceResponses = await axios.all(image.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
-              image.detected_faces = faceResponses.map(r => r.data)
-              return { image }
-            },
-            complete: ({ image }) => commit('SET_IMAGE', { image })
-          })
-        },
-        deleteImage({ dispatch, commit }, { id }) {
-          dispatch('doAction', {
-            name: 'deleteImage',
-            action: () => axios.delete('/entity/Image/' + id),
-            complete: result => commit('DELETE_IMAGE', { id })
-          })
-        },
-        linkFaceToPerson({ dispatch, commit }, { face, person }) {
-          dispatch('doAction', {
+        async linkFaceToPerson({ dispatch, commit }, { face, person }) {
+          await dispatch('doAction', {
             name: 'linkFaceToPerson',
             action: () => axios.post('/link_face_to_person', {
               face_id: face.id,
               person_id: person.id,
-            }),
-            complete: () => commit('LINK_FACE_TO_PERSON', { face, person })
+            })
           })
+          commit('LINK_FACE_TO_PERSON', { face, person })
         }
       },
+    })
+
+    const router = new VueRouter({
+      routes: [{
+        path: '/',
+        redirect: '/images/all',
+      }, {
+        path: '/images',
+        component: {
+          template: `
+            <div>
+              <md-tabs md-sync-route>
+                <md-tab md-label="Untagged" to="/images/untagged" />
+                <md-tab md-label="All" to="/images/all" />
+              </md-tabs>
+              <router-view></router-view>
+            </div>
+          `,
+        },
+        children: [{
+          path: 'all/:id',
+          component: {
+            template: '<frwa-images :id="$route.params.id" />',
+          },
+        }, {
+          path: 'untagged',
+          component: {
+            template: `
+              <md-content>
+                <frwa-images kind="untagged" />
+                <frwa-people />
+              </md-content>
+            `,
+          },
+        }],
+      }, {
+        path: '*',
+        component: {
+          template: `
+            <md-empty-state md-icon="error" md-label="Page not found!">
+                <md-button class="md-primary md-raised" @click="$router.push({path: '/'})">Get me outta here!</md-button>
+            </md-empty-state>
+          `,
+        },
+      }],
     })
 
     new Vue({
       el: '#app',
       store,
+      router,
     })
   </script>
 </body>
