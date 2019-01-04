@@ -65,8 +65,9 @@
 
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <md-chips v-model="names" md-placeholder="Add person..." @md-delete="onDelete" @md-insert="onInsert" style="padding:5px">
-      <template slot="md-chip" slot-scope="{ chip }">
+    <md-chips v-model="names" md-placeholder="Add person..." style="padding:5px"
+      @md-delete="onDelete" @md-insert="onInsert">
+      <template slot="md-chip" slot-scope="{ chip }" md-clickable>
         <div draggable @dragstart="onDragStart(chip, $event)">
           {{ format(chip) }}
         </div>
@@ -87,23 +88,22 @@
         this.$store.dispatch('loadPeople')
       },
       methods: {
+        getPerson(name) {
+          return this.$store.getters.personByName[name]
+        },
         onDragStart(name, event) {
-          let person = this.$store.getters.personByName[name]
-          if (!person) return false
+          let person = this.getPerson(name)
           event.dataTransfer.setData('text/plain', 'person_id=' + person.id)
         },
         format(name) {
-          let person = this.$store.getters.personByName[name]
-          if (person) {
-            return `${person.name} (${person.detected_faces.length})`
-          } else {
-            return name
-          }
+          let person = this.getPerson(name)
+          return `${person.name} (${person.detected_faces.length})`
         },
         onDelete(name) {
           this.resetNames()
-          if (window.confirm(`Really delete ${name}?`)) {
-            this.$store.dispatch('deletePerson', { name })
+          let person = this.getPerson(name)
+          if (window.confirm(`Really delete ${person.name}?`)) {
+            this.$store.dispatch('deletePerson', { id: person.id })
           }
         },
         onInsert(name) {
@@ -152,8 +152,8 @@
       props: ['kind', 'id'],
       async mounted() {
         this.ids = await this.loadIds(this.kind)
-
-        return this.loadImage(this.determineId(this.id))
+        let requestedId = this.$route ? this.$route.params.id : this.id
+        this.loadImage(this.determineId(requestedId))
       },
       computed: {
         index() {
@@ -235,6 +235,7 @@
         },
         updateRoute(id) {
           if (!this.$router) return
+          debugger
           this.$router.push({ name: this.$route.name, params: { ...this.$route.params, id: id } })
         },
       },
@@ -252,9 +253,10 @@
   <!-- <frwa-svg-face> -->
   <script type="text/x-template" id="frwa-svg-face-template">
     <g @dragover.prevent="dragOver(face, $event)" @drop.prevent="drop(face, $event)">
-      <rect :x="face.image_region.left" :y="face.image_region.top"
-        :width="face.image_region.right - face.image_region.left" :height="face.image_region.bottom - face.image_region.top"
-        fill="white" fill-opacity="0" stroke="red" stroke-width="2" />
+      <rect :x="face.image_region.left" :y="face.image_region.top" :rx="5" :ry="5"
+        :width="face.image_region.right - face.image_region.left"
+        :height="face.image_region.bottom - face.image_region.top"
+        fill-opacity="0" stroke="white" stroke-width="2" />
       <polyline v-for="(points, label) in face.labeled_landmarks" :key="face.id + label"
         :points="points.map(p=>p[0]+','+p[1]).join(' ')"
         fill="none" stroke="red" />
@@ -264,6 +266,14 @@
     Vue.component('frwa-svg-face', {
       template: '#frwa-svg-face-template',
       props: ['face'],
+      computed: {
+        person() {
+          return this.$store.state.personById[this.face.person]
+        },
+        name() {
+          if (this.person) return this.person.name
+        },
+      },
       methods: {
         getPersonId(event) {
           let data = event.dataTransfer.getData("text/plain")
@@ -309,11 +319,12 @@
           let totalCount = Object.values(state.countByAction).reduce((a, b) => a + b, 0)
           return totalCount > 0
         },
-        personByName: state => {
+        people: state => Object.values(state.personById),
+        personByName: (state, getters) => {
           const reducer = (acc, person) => {
             return { ...acc, [person.name]: person }
           }
-          return Object.values(state.personById).reduce(reducer, {})
+          return getters.people.reduce(reducer, {})
         },
         names: (state, getters) => Object.keys(getters.personByName),
       },
@@ -347,6 +358,7 @@
           state.personById = personById
         },
         LINK_FACE_TO_PERSON(state, { face, person }) {
+          if (person.detected_faces.includes(face)) return
           let updatedPerson = { ...person, detected_faces: [...person.detected_faces, face] }
           state.personById = { ...state.personById, [person.id]: updatedPerson }
         },
@@ -377,16 +389,12 @@
           })
           commit('ADD_PERSON', { person: result.data })
         },
-        async deletePerson({ dispatch, commit, getters }, { name }) {
-          let person = getters.personByName[name]
+        async deletePerson({ dispatch, commit, getters }, { id }) {
           let result = await dispatch('doAction', {
             name: 'deletePerson',
-            action: () => {
-              if (!person) throw Error(`Person named '${name}' not found`)
-              return axios.delete('/entity/Person/' + person.id)
-            }
+            action: () => axios.delete('/entity/Person/' + id)
           })
-          commit('DELETE_PERSON', { id: person.id })
+          commit('DELETE_PERSON', { id })
         },
         async linkFaceToPerson({ dispatch, commit }, { face, person }) {
           await dispatch('doAction', {
@@ -419,12 +427,17 @@
           `,
         },
         children: [{
-          path: 'all/:id',
+          path: 'all/:id?',
           component: {
-            template: '<frwa-images :id="$route.params.id" />',
+            template: `
+              <md-content>
+                <frwa-images />
+                <frwa-people />
+              </md-content>
+            `,
           },
         }, {
-          path: 'untagged',
+          path: 'untagged/:id?',
           component: {
             template: `
               <md-content>
@@ -438,10 +451,10 @@
         path: '*',
         component: {
           template: `
-            <md-empty-state md-icon="error" md-label="Page not found!">
-                <md-button class="md-primary md-raised" @click="$router.push({path: '/'})">Get me outta here!</md-button>
-            </md-empty-state>
-          `,
+              <md-empty-state md-icon="error" md-label="Page not found!">
+                  <md-button class="md-primary md-raised" @click="$router.push({path: '/'})">Get me outta here!</md-button>
+              </md-empty-state>
+            `,
         },
       }],
     })
