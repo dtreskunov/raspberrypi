@@ -65,55 +65,119 @@
 
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <md-chips v-model="names" md-placeholder="Add person..." style="padding:5px"
-      @md-delete="onDelete" @md-insert="onInsert">
-      <template slot="md-chip" slot-scope="{ chip }" md-clickable>
-        <div draggable @dragstart="onDragStart(chip, $event)">
-          {{ format(chip) }}
-        </div>
-      </template>
-      <div class="md-helper-text">Choose a person &amp; tag their face in the photo</div>
-    </md-chips>
+    <span style="padding:5px">
+      <md-chip v-for="person in people" :key="person.id"
+        :class="{'md-primary': isHighlighted(person)}"
+        :md-clickable="clickable" @click="clickPerson(person)"
+        :md-deletable="deletable" @md-delete="deletePerson(person)">
+        {{person.name}}
+      </md-chip>
+      <slot></slot>
+    </span>
   </script>
   <script>
     Vue.component('frwa-people', {
       template: '#frwa-people-template',
-      data() {
-        return {
-          names: []
-        }
-      },
-      mounted() {
-        this.$store.watch((_, getters) => getters.names, () => this.resetNames())
-        this.$store.dispatch('loadPeople')
+      props: {
+        people: {
+          type: Array,
+          default: () => [],
+        },
+        highlightedIds: {
+          type: Array,
+          default: () => [],
+        },
+        deletable: {
+          type: Boolean,
+          default: false,
+        },
+        clickable: {
+          type: Boolean,
+          default: false,
+        },
       },
       methods: {
-        getPerson(name) {
-          return this.$store.getters.personByName[name]
+        isHighlighted(person) {
+          return this.highlightedIds.includes(person.id)
         },
-        onDragStart(name, event) {
-          let person = this.getPerson(name)
-          event.dataTransfer.setData('text/plain', 'person_id=' + person.id)
+        clickPerson(person) {
+          this.$emit('click', person)
         },
-        format(name) {
-          let person = this.getPerson(name)
-          return `${person.name} (${person.detected_faces.length})`
-        },
-        onDelete(name) {
-          this.resetNames()
-          let person = this.getPerson(name)
-          if (window.confirm(`Really delete ${person.name}?`)) {
-            this.$store.dispatch('deletePerson', { id: person.id })
-          }
-        },
-        onInsert(name) {
-          this.resetNames()
-          this.$store.dispatch('newPerson', { name })
-        },
-        resetNames() {
-          this.names = [...this.$store.getters.names]
+        deletePerson(person) {
+          this.$emit('delete', person)
         },
       }
+    })
+  </script>
+
+  <!-- <frwa-face-dialog> -->
+  <script type="text/x-template" id="frwa-face-dialog-template">
+    <md-dialog v-if="face" :md-active.sync="internalActive">
+      <md-card>
+        <md-card-header>
+          <div class="md-title">Detected Face</div>
+        </md-card-header>
+        <md-card-content>
+          <md-list class="md-dense">
+            <md-list-item>
+              <table><tr>
+                <td>
+                  <md-progress-spinner :md-value="100 * face.face_score" md-mode="determinate"/>
+                  <div class="md-helper-text">Face score</div>
+                </td><td>
+                  <md-progress-spinner :md-value="100 * face.joy_score" md-mode="determinate"/>
+                  <div class="md-helper-text">Joy score</div>
+                </td>
+              </tr></table>
+            </md-list-item>
+            <md-divider/>
+            <md-list-item>
+              <frwa-people :people="Object.values($store.state.personById)"
+                :clickable="true" @click="onClickPerson"
+                :highlightedIds="face.person ? [face.person]: []">
+                <md-chip md-clickable><md-icon>person_add</md-icon></md-chip>
+              </frwa-people>
+            </md-list-item>
+          </md-list>
+        </md-card-content>
+        <md-card-actions>
+          <md-button class="md-accent" @click="deleteFace">
+            <md-icon>delete</md-icon>Bad Detection
+          </md-button>
+          <md-button @click="internalActive = false">Close</md-button>
+        </md-card-actions>
+      </md-card>
+    </md-dialog>
+  </script>
+  <script>
+    Vue.component('frwa-face-dialog', {
+      template: '#frwa-face-dialog-template',
+      props: ['face', 'active'],
+      data() {
+        return {
+          internalActive: this.active,
+        }
+      },
+      watch: {
+        active(value) {
+          this.internalActive = value
+        },
+        internalActive(value) {
+          this.$emit('update:active', value)
+        },
+      },
+      methods: {
+        deleteFace() {
+          debugger
+        },
+        onClickPerson(person) {
+          if (this.face.person === person.id) {
+            this.$emit('unselect:person', person)
+          } else {
+            this.$emit('select:person', person)
+          }
+        },
+      },
     })
   </script>
 
@@ -127,33 +191,56 @@
     </md-empty-state>
     <div v-else @keyup.left="prev" @keyup.right="next" tabindex="0">
       <div style="position:relative">
-        <md-button class="md-raised" style="position:absolute;bottom:1em" @click="deleteImage">
-          <md-icon>delete</md-icon>Bad detection?
+        <md-button class="md-raised md-accent" style="position:absolute;bottom:1em" @click="deleteImage">
+          <md-icon>delete</md-icon>Bad detection
         </md-button>
-        <svg v-if="image" :viewBox="'0 0 ' + image.width + ' ' + image.height">
+        <svg v-if="image"
+          :viewBox="'0 0 ' + image.width + ' ' + image.height"
+          :style="`max-width:${image.width}px`">
           <image x="0" y="0" :width="image.width" :height="image.height" :xlink:href="image.data_uri"></image>
-          <frwa-svg-face v-for="face in image.detected_faces" :key="face.id" :face="face" />
+          <frwa-svg-face v-for="face in faces" :key="face.id" :face="face" @click="onFaceClick" />
         </svg>
       </div>
       <span v-on:click="prev"><md-icon>chevron_left</md-icon></span>
       {{this.index + 1}} of {{this.count}}
       <span v-on:click="next"><md-icon>chevron_right</md-icon></span>
+      <frwa-people :people="detectedPeople" :deletable="true"/>
+      <frwa-face-dialog :face="selectedFace" :active.sync="showFaceDialog"
+        @select:person="onSelectPerson"
+        @unselect:person="onUnselectPerson"/>
     </div>
   </script>
   <script>
     Vue.component('frwa-images', {
       template: '#frwa-images-template',
+      props: ['id', 'kind'],
       data() {
         return {
           ids: [],
           image: null,
+          faces: [],
+          showFaceDialog: false,
+          selectedFace: null,
         }
       },
-      props: ['kind', 'id'],
-      async mounted() {
-        this.ids = await this.loadIds(this.kind)
-        let requestedId = this.$route ? this.$route.params.id : this.id
-        this.loadImage(this.determineId(requestedId))
+      watch: {
+        id: function (newId, oldId) {
+          this.loadImage(this.determineId(this.ids, newId))
+        },
+        kind: function (newKind, oldKind) {
+          this.loadIds(newKind)
+        },
+        ids: function (newIds, oldIds) {
+          this.loadImage(this.determineId(newIds, this.id))
+        },
+        image: function (newImage, oldImage) {
+          if (newImage) {
+            this.loadFaces(newImage.detected_faces)
+          }
+        },
+        'image.id': function (newId, oldId) {
+          if (newId) this.$emit('update:id', newId)
+        },
       },
       computed: {
         index() {
@@ -170,21 +257,43 @@
               return 'No images :('
           }
         },
+        detectedPeopleIds() {
+          let detectedPeopleIds = new Set()
+          this.faces.forEach(face => {
+            if (face.person) detectedPeopleIds.add(face.person)
+          })
+          return Array.from(detectedPeopleIds)
+        },
+        detectedPeople() {
+          return this.detectedPeopleIds.map(id => this.$store.state.personById[id])
+        },
+      },
+      mounted() {
+        this.loadIds(this.kind)
       },
       methods: {
-        determineId(requestedId) {
-          if (this.ids && this.ids.includes(requestedId)) {
+        determineId(ids, requestedId) {
+          if (ids && this.ids.includes(requestedId)) {
             return requestedId
-          } else if (this.ids && this.ids.length > 0) {
-            return this.ids[0]
+          } else if (ids && ids.length > 0) {
+            return ids[0]
+          } else {
+            return null
           }
         },
         async loadIds(kind) {
+          function url() {
+            switch (kind) {
+              case 'all': return '/ids/Image'
+              case 'untagged': return 'ids/Image/untagged'
+              default: throw new Error('Unsupported kind ' + kind)
+            }
+          }
           let result = await this.$store.dispatch('doAction', {
             name: 'loadImageIds',
-            action: () => axios.get('/ids/Image' + (kind ? '/' + kind : ''))
+            action: () => axios.get(url())
           })
-          return result.data
+          this.ids = result.data
         },
         async loadImage(id) {
           if (!id) {
@@ -192,16 +301,20 @@
             return
           }
           if (this.image && this.image.id === id) return
-          this.image = await this.$store.dispatch('doAction', {
+          let response = await this.$store.dispatch('doAction', {
             name: 'loadImage',
-            action: async () => {
-              let response = await axios.get('/entity/Image/' + id)
-              let image = response.data
-              let faceResponses = await Promise.all(image.detected_faces.map(id => axios.get('/entity/DetectedFace/' + id)))
-              image.detected_faces = faceResponses.map(r => r.data)
-              return image
-            }
+            action: () => axios.get('/entity/Image/' + id)
           })
+          this.image = response.data
+        },
+        async loadFaces(ids) {
+          let responses = await this.$store.dispatch('doAction', {
+            name: 'loadFaces',
+            action: () => Promise.all(
+              ids.map(
+                id => axios.get('/entity/DetectedFace/' + id)))
+          })
+          this.faces = responses.map(response => response.data)
         },
         async deleteImage() {
           if (!this.image) return
@@ -233,18 +346,24 @@
           }
           this.loadImage(this.ids[newIndex])
         },
-        updateRoute(id) {
-          if (!this.$router) return
-          debugger
-          this.$router.push({ name: this.$route.name, params: { ...this.$route.params, id: id } })
+        onFaceClick(face) {
+          this.selectedFace = face
+          this.showFaceDialog = true
         },
-      },
-      watch: {
-        image: function (newImage, oldImage) {
-          this.updateRoute(newImage && newImage.id)
+        async onSelectPerson(person) {
+          if (!this.selectedFace) return
+          await this.$store.dispatch('linkFaceToPerson', {
+            face: this.selectedFace,
+            person: person,
+          })
+          this.showFaceDialog = false
         },
-        '$route.params.id': function (newId, oldId) {
-          this.loadImage(this.determineId(newId))
+        async onUnselectPerson(person) {
+          if (!this.selectedFace) return
+          await this.$store.dispatch('unlinkFaceFromPerson', {
+            face: this.selectedFace,
+            person: person,
+          })
         },
       },
     })
@@ -252,7 +371,7 @@
 
   <!-- <frwa-svg-face> -->
   <script type="text/x-template" id="frwa-svg-face-template">
-    <g @dragover.prevent="dragOver(face, $event)" @drop.prevent="drop(face, $event)">
+    <g @click="$emit('click', face)">
       <rect :x="face.image_region.left" :y="face.image_region.top" :rx="5" :ry="5"
         :width="face.image_region.right - face.image_region.left"
         :height="face.image_region.bottom - face.image_region.top"
@@ -272,25 +391,6 @@
         },
         name() {
           if (this.person) return this.person.name
-        },
-      },
-      methods: {
-        getPersonId(event) {
-          let data = event.dataTransfer.getData("text/plain")
-          if (!data) return
-          let match = data.match("^person_id=(.*)")
-          if (!match) return
-          return match[1]
-        },
-        dragOver(face, event) {
-          if (this.getPersonId(event)) {
-            event.dataTransfer.dropEffect = 'link'
-          }
-        },
-        drop(face, event) {
-          let person = this.$store.state.personById[this.getPersonId(event)]
-          if (!person) return
-          this.$store.dispatch('linkFaceToPerson', { face, person })
         },
       },
     })
@@ -358,8 +458,18 @@
           state.personById = personById
         },
         LINK_FACE_TO_PERSON(state, { face, person }) {
+          face.person = person.id
           if (person.detected_faces.includes(face)) return
           let updatedPerson = { ...person, detected_faces: [...person.detected_faces, face] }
+          state.personById = { ...state.personById, [person.id]: updatedPerson }
+        },
+        UNLINK_FACE_FROM_PERSON(state, { face, person }) {
+          if (face.person && face.person !== person.id) {
+            throw new Error('Face is currently linked to a different person')
+          }
+          face.person = null
+          if (!person.detected_faces.includes(face)) return
+          let updatedPerson = { ...person, detected_faces: person.detected_faces.filter(faceId => faceId !== face.id) }
           state.personById = { ...state.personById, [person.id]: updatedPerson }
         },
       },
@@ -405,7 +515,17 @@
             })
           })
           commit('LINK_FACE_TO_PERSON', { face, person })
-        }
+        },
+        async unlinkFaceFromPerson({ dispatch, commit }, { face, person }) {
+          await dispatch('doAction', {
+            name: 'unlinkFaceFromPerson',
+            action: () => axios.post('/unlink_face_from_person', {
+              face_id: face.id,
+              person_id: person.id,
+            })
+          })
+          commit('UNLINK_FACE_FROM_PERSON', { face, person })
+        },
       },
     })
 
@@ -414,39 +534,36 @@
         path: '/',
         redirect: '/images/all',
       }, {
-        path: '/images',
+        path: '/images/:kind/:id?',
         component: {
+          computed: {
+            id: {
+              get() {
+                return this.$route.params.id
+              },
+              set(id) {
+                this.$router.push({ params: { id } })
+              }
+            },
+            kind: {
+              get() {
+                return this.$route.params.kind
+              },
+              set(kind) {
+                this.$router.push({ params: { kind } })
+              }
+            },
+          },
           template: `
             <div>
-              <md-tabs md-sync-route>
-                <md-tab md-label="Untagged" to="/images/untagged" />
-                <md-tab md-label="All" to="/images/all" />
+              <md-tabs :md-active-tab="kind" @md-changed="kind=$event">
+                <md-tab id="all" md-label="All"/>
+                <md-tab id="untagged" md-label="Untagged"/>
               </md-tabs>
-              <router-view></router-view>
+              <frwa-images v-bind="{id, kind}" @update:id="id=$event"/>
             </div>
           `,
         },
-        children: [{
-          path: 'all/:id?',
-          component: {
-            template: `
-              <md-content>
-                <frwa-images />
-                <frwa-people />
-              </md-content>
-            `,
-          },
-        }, {
-          path: 'untagged/:id?',
-          component: {
-            template: `
-              <md-content>
-                <frwa-images kind="untagged" />
-                <frwa-people />
-              </md-content>
-            `,
-          },
-        }],
       }, {
         path: '*',
         component: {
@@ -463,6 +580,9 @@
       el: '#app',
       store,
       router,
+      mounted() {
+        this.$store.dispatch('loadPeople')
+      }
     })
   </script>
 </body>
