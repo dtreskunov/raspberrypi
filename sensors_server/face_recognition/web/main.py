@@ -130,11 +130,12 @@ def unlink_face_from_person():
         face = db.DetectedFace[face_id]
         if not face:
             raise NotFound('Face with id "{}" not found'.format(face_id))
-        if str(face.person.id) != person_id:
-            raise Conflict(
-                '{} is currently linked to {} - cannot unlink from {}'.format(
-                    face, face.person.id, person_id))
-        face.person = None
+        if face.person:
+            if str(face.person.id) != person_id:
+                raise Conflict(
+                    '{} is currently linked to {} - cannot unlink from {}'.format(
+                        face, face.person.id, person_id))
+            face.person = None
         return jsonify(_to_dict(face))
 
 

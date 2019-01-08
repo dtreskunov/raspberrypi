@@ -7,8 +7,6 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700,400italic|Material+Icons">
   <link rel="stylesheet" href="https://unpkg.com/vue-material/dist/vue-material.min.css">
   <link rel="stylesheet" href="https://unpkg.com/vue-material/dist/theme/default.css">
-  <style>
-  </style>
 </head>
 
 <body>
@@ -65,16 +63,26 @@
 
   <!-- <frwa-people> -->
   <script type="text/x-template" id="frwa-people-template">
-    <span style="padding:5px">
-      <md-chip v-for="person in people" :key="person.id"
-        :class="{'md-primary': isHighlighted(person)}"
-        :md-clickable="clickable" @click="clickPerson(person)"
-        :md-deletable="deletable" @md-delete="deletePerson(person)">
-        {{person.name}}
-      </md-chip>
-      <slot></slot>
-    </span>
+    <md-chips v-model="names" :md-static="!editable"
+      @md-click="clickName" @md-delete="deleteName" @md-insert="insertName"
+      md-placeholder="Name..." :md-check-duplicated="true"
+      class="pulse-on-error">
+      <template slot="md-chip" slot-scope="{ chip }">
+        <span class="person-name"
+          :class="{highlighted: highlightedNames.includes(chip), clickable}">
+          {{chip}}
+        </span>
+      </template>
+    </md-chips>
   </script>
+  <style>
+    .person-name.highlighted {
+      font-weight: bold
+    }
+    .person-name.clickable:hover {
+      font-weight: bold
+    }
+  </style>
   <script>
     Vue.component('frwa-people', {
       template: '#frwa-people-template',
@@ -87,7 +95,7 @@
           type: Array,
           default: () => [],
         },
-        deletable: {
+        editable: {
           type: Boolean,
           default: false,
         },
@@ -96,17 +104,94 @@
           default: false,
         },
       },
+      data() {
+        return {
+          names: this.getNames(this.people),
+        }
+      },
+      watch: {
+        people(newPeople) {
+          this.names = this.getNames(newPeople)
+        }
+      },
+      computed: {
+        highlightedNames() {
+          return this.getNames(
+            this.people.filter(
+              person => this.highlightedIds.includes(person.id)))
+        },
+        personByName() {
+          return this.people.reduce(
+            (map, person) => {
+              return { ...map, [person.name]: person }
+            }, {})
+        },
+      },
       methods: {
-        isHighlighted(person) {
-          return this.highlightedIds.includes(person.id)
+        getNames(people) {
+          return people.map(person => person.name)
         },
-        clickPerson(person) {
-          this.$emit('click', person)
+        clickName(name) {
+          this.$emit('click', this.personByName[name])
         },
-        deletePerson(person) {
+        async deleteName(name) {
+          this.names = this.getNames(this.people)
+          if (!window.confirm(`Reallly delete ${name}?`)) return
+          let person = this.personByName[name]
+          await this.$store.dispatch('deletePerson', person)
           this.$emit('delete', person)
         },
+        async insertName(name) {
+          this.names = this.getNames(this.people)
+          let person = await this.$store.dispatch('newPerson', { name })
+          this.$emit('insert', person)
+        },
       }
+    })
+  </script>
+
+  <!-- <frwa-face-image> -->
+  <script type="text/x-template" id="frwa-face-image-template">
+    <svg v-if="face && image" :viewBox="viewBox" @click="showLandmarks = !showLandmarks; $emit('click', face)">
+      <defs>
+        <clipPath id="faceClipPath">
+          <circle :cx="cx" :cy="cy" :r="r" />
+        </clipPath>
+      </defs>
+      <image x="0" y="0" :width="image.width" :height="image.height"
+        clip-path="url(#faceClipPath)"
+        :xlink:href="image.data_uri"></image>
+      <polyline v-if="showLandmarks" v-for="(points, label) in face.labeled_landmarks" :key="face.id + label"
+        :points="points.map(p=>p[0]+','+p[1]).join(' ')"
+        fill="none" stroke="red" />
+    </svg>
+  </script>
+  <script>
+    Vue.component('frwa-face-image', {
+      template: '#frwa-face-image-template',
+      props: ['face', 'image'],
+      data() {
+        return {
+          showLandmarks: false,
+        }
+      },
+      computed: {
+        viewBox() {
+          return `${this.cx - this.r} ${this.cy - this.r} ${2 * this.r} ${2 * this.r}`
+        },
+        cx() {
+          return (this.face.image_region.left + this.face.image_region.right) / 2
+        },
+        cy() {
+          return (this.face.image_region.top + this.face.image_region.bottom) / 2
+        },
+        r() {
+          return Math.sqrt(
+            (this.face.image_region.right - this.face.image_region.left) ** 2 +
+            (this.face.image_region.bottom - this.face.image_region.top) ** 2
+          ) / 2
+        },
+      },
     })
   </script>
 
@@ -122,6 +207,8 @@
             <md-list-item>
               <table><tr>
                 <td>
+                  <frwa-face-image :face="face" :image="image" width="100" height="100"/>
+                </td><td>
                   <md-progress-spinner :md-value="100 * face.face_score" md-mode="determinate"/>
                   <div class="md-helper-text">Face score</div>
                 </td><td>
@@ -133,9 +220,11 @@
             <md-divider/>
             <md-list-item>
               <frwa-people :people="Object.values($store.state.personById)"
+                :editable="true"
                 :clickable="true" @click="onClickPerson"
+                @insert="onInsertPerson"
+                @delete="onDeletePerson"
                 :highlightedIds="face.person ? [face.person]: []">
-                <md-chip md-clickable><md-icon>person_add</md-icon></md-chip>
               </frwa-people>
             </md-list-item>
           </md-list>
@@ -152,7 +241,7 @@
   <script>
     Vue.component('frwa-face-dialog', {
       template: '#frwa-face-dialog-template',
-      props: ['face', 'active'],
+      props: ['face', 'active', 'image'],
       data() {
         return {
           internalActive: this.active,
@@ -168,7 +257,7 @@
       },
       methods: {
         deleteFace() {
-          debugger
+          this.$emit('delete:face', this.face)
         },
         onClickPerson(person) {
           if (this.face.person === person.id) {
@@ -176,6 +265,67 @@
           } else {
             this.$emit('select:person', person)
           }
+        },
+        onInsertPerson(person) {
+          this.$emit('select:person', person)
+        },
+        onDeletePerson(person) {
+          if (this.face.person === person.id) {
+            this.$emit('unselect:person', person)
+          }
+        },
+      },
+    })
+  </script>
+
+  <!-- <frwa-pager> -->
+  <script type="text/x-template" id="frwa-pager-template">
+    <div v-if="ids" @keyup.left="prev" @keyup.right="next" tabindex="0">
+      <span @click="prev"><md-icon>chevron_left</md-icon></span>
+      {{index + 1}} of {{ids.length}}
+      <span @click="next"><md-icon>chevron_right</md-icon></span>
+    </div>
+  </script>
+  <script>
+    Vue.component('frwa-pager', {
+      template: '#frwa-pager-template',
+      props: {
+        id: { type: String },
+        ids: { type: Array, required: true },
+      },
+      computed: {
+        index() {
+          return this.ids.indexOf(this.id)
+        },
+      },
+      watch: {
+        index(newIndex, oldIndex) {
+          // adjust the index if it becomes invalid
+          if (newIndex < 0 && oldIndex >= 0) {
+            this.$emit('update:id', Math.max(oldIndex, this.ids.length - 1))
+          }
+        },
+      },
+      methods: {
+        prev() {
+          if (this.index < 0) return
+          let newIndex
+          if (this.index === 0) {
+            newIndex = this.ids.length - 1
+          } else {
+            newIndex = this.index - 1
+          }
+          this.$emit('update:id', this.ids[newIndex])
+        },
+        next() {
+          if (this.index < 0) return
+          let newIndex
+          if (this.index === this.ids.length - 1) {
+            newIndex = 0
+          } else {
+            newIndex = this.index + 1
+          }
+          this.$emit('update:id', this.ids[newIndex])
         },
       },
     })
@@ -189,7 +339,7 @@
       :md-label="noIdsLabel"
       md-description="Let the camera capture a few mugshots, then come back and tag your friends to allow face recognition to work!">
     </md-empty-state>
-    <div v-else @keyup.left="prev" @keyup.right="next" tabindex="0">
+    <div v-else>
       <div style="position:relative">
         <md-button class="md-raised md-accent" style="position:absolute;bottom:1em" @click="deleteImage">
           <md-icon>delete</md-icon>Bad detection
@@ -201,13 +351,12 @@
           <frwa-svg-face v-for="face in faces" :key="face.id" :face="face" @click="onFaceClick" />
         </svg>
       </div>
-      <span v-on:click="prev"><md-icon>chevron_left</md-icon></span>
-      {{this.index + 1}} of {{this.count}}
-      <span v-on:click="next"><md-icon>chevron_right</md-icon></span>
-      <frwa-people :people="detectedPeople" :deletable="true"/>
-      <frwa-face-dialog :face="selectedFace" :active.sync="showFaceDialog"
+      <frwa-pager :ids="ids" :id="image ? image.id : null" @update:id="loadImage($event)"/>
+      <frwa-people :people="detectedPeople" :clickable="true"/>
+      <frwa-face-dialog :image="image" :face="selectedFace" :active.sync="showFaceDialog"
         @select:person="onSelectPerson"
-        @unselect:person="onUnselectPerson"/>
+        @unselect:person="onUnselectPerson"
+        @delete:face="onDeleteFace"/>
     </div>
   </script>
   <script>
@@ -243,12 +392,6 @@
         },
       },
       computed: {
-        index() {
-          return (this.ids && this.image) ? this.ids.indexOf(this.image.id) : null
-        },
-        count() {
-          return this.ids ? this.ids.length : null
-        },
         noIdsLabel() {
           switch (this.kind) {
             case 'untagged':
@@ -265,7 +408,9 @@
           return Array.from(detectedPeopleIds)
         },
         detectedPeople() {
-          return this.detectedPeopleIds.map(id => this.$store.state.personById[id])
+          return this.detectedPeopleIds.map(
+            id => this.$store.state.personById[id]
+          ).filter(person => person)
         },
       },
       mounted() {
@@ -306,6 +451,7 @@
             action: () => axios.get('/entity/Image/' + id)
           })
           this.image = response.data
+          this.showFaceDialog = false
         },
         async loadFaces(ids) {
           let responses = await this.$store.dispatch('doAction', {
@@ -323,28 +469,7 @@
             action: () => axios.delete('/entity/Image/' + this.image.id),
           })
 
-          let newIndex = this.index
           this.ids = this.ids.filter(filteredId => filteredId !== this.image.id)
-          newIndex = Math.max(newIndex, this.ids.length - 1)
-          return this.loadImage(this.ids[newIndex])
-        },
-        prev() {
-          let newIndex
-          if (this.index === 0) {
-            newIndex = this.ids.length - 1
-          } else {
-            newIndex = this.index - 1
-          }
-          this.loadImage(this.ids[newIndex])
-        },
-        next() {
-          let newIndex
-          if (this.index === this.ids.length - 1) {
-            newIndex = 0
-          } else {
-            newIndex = this.index + 1
-          }
-          this.loadImage(this.ids[newIndex])
         },
         onFaceClick(face) {
           this.selectedFace = face
@@ -364,6 +489,12 @@
             face: this.selectedFace,
             person: person,
           })
+        },
+        async onDeleteFace(face) {
+          await this.$store.dispatch('deleteFace', { face })
+          this.showFaceDialog = false
+          let updatedFaces = this.image.detected_faces.filter(id => id !== face.id)
+          this.image = { ...this.image, detected_faces: updatedFaces }
         },
       },
     })
@@ -452,6 +583,13 @@
         ADD_PERSON(state, { person }) {
           state.personById = { ...state.personById, [person.id]: person }
         },
+        DELETE_FACE(state, { face }) {
+          if (!face.person) return
+          let person = state.personById[face.person]
+          if (!person) throw new Error('Face references unknown person')
+          let updatedPerson = { ...person, detected_faces: person.detected_faces.filter(faceId => faceId !== face.id) }
+          state.personById = { ...state.personById, [face.person]: updatedPerson }
+        },
         DELETE_PERSON(state, { id }) {
           let personById = { ...state.personById }
           delete personById[id]
@@ -468,6 +606,7 @@
             throw new Error('Face is currently linked to a different person')
           }
           face.person = null
+          if (!state.personById[person.id]) return
           if (!person.detected_faces.includes(face)) return
           let updatedPerson = { ...person, detected_faces: person.detected_faces.filter(faceId => faceId !== face.id) }
           state.personById = { ...state.personById, [person.id]: updatedPerson }
@@ -493,11 +632,22 @@
           commit('SET_PEOPLE', { people: result.data })
         },
         async newPerson({ dispatch, commit }, { name }) {
-          let result = await dispatch('doAction', {
+          let person = await dispatch('doAction', {
             name: 'newPerson',
-            action: () => axios.post('/entity/Person', { name })
+            async action() {
+              let result = await axios.post('/entity/Person', { name })
+              return result.data
+            }
           })
-          commit('ADD_PERSON', { person: result.data })
+          commit('ADD_PERSON', { person })
+          return person
+        },
+        async deleteFace({ dispatch, commit, getters }, { face }) {
+          let result = await dispatch('doAction', {
+            name: 'deleteFace',
+            action: () => axios.delete('/entity/DetectedFace/' + face.id)
+          })
+          commit('DELETE_FACE', { face })
         },
         async deletePerson({ dispatch, commit, getters }, { id }) {
           let result = await dispatch('doAction', {
