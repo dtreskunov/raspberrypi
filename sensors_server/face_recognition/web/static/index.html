@@ -301,10 +301,12 @@
       watch: {
         index(newIndex, oldIndex) {
           // adjust the index if it becomes invalid
-          if (newIndex < 0 && oldIndex >= 0 && this.ids.length > 0) {
-            let index = Math.max(oldIndex, this.ids.length - 1)
-            this.$emit('update:id', this.ids[index])
-          }
+          if (newIndex >= 0) return
+          if (oldIndex < 0) return
+          if (this.ids.length === 0) return
+          // try to keep the same index
+          let index = Math.min(oldIndex, this.ids.length - 1)
+          this.$emit('update:id', this.ids[index])
         },
       },
       methods: {
