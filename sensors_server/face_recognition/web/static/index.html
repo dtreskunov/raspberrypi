@@ -301,8 +301,9 @@
       watch: {
         index(newIndex, oldIndex) {
           // adjust the index if it becomes invalid
-          if (newIndex < 0 && oldIndex >= 0) {
-            this.$emit('update:id', Math.max(oldIndex, this.ids.length - 1))
+          if (newIndex < 0 && oldIndex >= 0 && this.ids.length > 0) {
+            let index = Math.max(oldIndex, this.ids.length - 1)
+            this.$emit('update:id', this.ids[index])
           }
         },
       },
