@@ -378,7 +378,7 @@
       </div>
       <frwa-pager :entries="ids" :entry="image ? image.id : null" @update:entry="loadImage"/>
       <frwa-people :people="detectedPeople" :clickable="true" @click="onDetectedPersonClick"/>
-      <frwa-face-dialog :image="image" :faces="faces" :face="selectedFace" :active.sync="showFaceDialog"
+      <frwa-face-dialog :image="image" :faces="faces" :face.sync="selectedFace" :active.sync="showFaceDialog"
         @select:person="onSelectPerson"
         @unselect:person="onUnselectPerson"
         @delete:face="onDeleteFace"/>
