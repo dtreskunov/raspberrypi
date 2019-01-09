@@ -197,22 +197,28 @@
 
   <!-- <frwa-face-dialog> -->
   <script type="text/x-template" id="frwa-face-dialog-template">
-    <md-dialog v-if="face" :md-active.sync="internalActive">
-      <md-card>
+    <md-dialog :md-active.sync="internalActive">
+      <md-empty-state
+        v-if="faces.length === 0"
+        md-icon="tag_faces"
+        md-label="No more faces">
+      </md-empty-state>
+      <md-card v-else>
         <md-card-header>
           <div class="md-title">Detected Face</div>
+          <frwa-pager :entries="faces" :entry.sync="internalFace"/>
         </md-card-header>
-        <md-card-content>
+        <md-card-content v-if="internalFace">
           <md-list class="md-dense">
             <md-list-item>
               <table><tr>
                 <td>
-                  <frwa-face-image :face="face" :image="image" width="100" height="100"/>
+                  <frwa-face-image :face="internalFace" :image="image" width="100" height="100"/>
                 </td><td>
-                  <md-progress-spinner :md-value="100 * face.face_score" md-mode="determinate"/>
+                  <md-progress-spinner :md-value="100 * internalFace.face_score" md-mode="determinate"/>
                   <div class="md-helper-text">Face score</div>
                 </td><td>
-                  <md-progress-spinner :md-value="100 * face.joy_score" md-mode="determinate"/>
+                  <md-progress-spinner :md-value="100 * internalFace.joy_score" md-mode="determinate"/>
                   <div class="md-helper-text">Joy score</div>
                 </td>
               </tr></table>
@@ -224,7 +230,7 @@
                 :clickable="true" @click="onClickPerson"
                 @insert="onInsertPerson"
                 @delete="onDeletePerson"
-                :highlightedIds="face.person ? [face.person]: []">
+                :highlightedIds="internalFace.person ? [internalFace.person]: []">
               </frwa-people>
             </md-list-item>
           </md-list>
@@ -241,10 +247,16 @@
   <script>
     Vue.component('frwa-face-dialog', {
       template: '#frwa-face-dialog-template',
-      props: ['face', 'active', 'image'],
+      props: {
+        face: Object,
+        faces: Array,
+        active: Boolean,
+        image: Object,
+      },
       data() {
         return {
           internalActive: this.active,
+          internalFace: this.face,
         }
       },
       watch: {
@@ -254,13 +266,19 @@
         internalActive(value) {
           this.$emit('update:active', value)
         },
+        face(value) {
+          this.internalFace = value
+        },
+        internalFace(value) {
+          this.$emit('update:face', value)
+        },
       },
       methods: {
         deleteFace() {
-          this.$emit('delete:face', this.face)
+          this.$emit('delete:face', this.internalFace)
         },
         onClickPerson(person) {
-          if (this.face.person === person.id) {
+          if (this.internalFace.person === person.id) {
             this.$emit('unselect:person', person)
           } else {
             this.$emit('select:person', person)
@@ -270,7 +288,7 @@
           this.$emit('select:person', person)
         },
         onDeletePerson(person) {
-          if (this.face.person === person.id) {
+          if (this.internalFace.person === person.id) {
             this.$emit('unselect:person', person)
           }
         },
@@ -280,9 +298,9 @@
 
   <!-- <frwa-pager> -->
   <script type="text/x-template" id="frwa-pager-template">
-    <div v-if="ids" @keyup.left="prev" @keyup.right="next" tabindex="0">
+    <div v-if="entries" @keyup.left="prev" @keyup.right="next" tabindex="0">
       <span @click="prev"><md-icon>chevron_left</md-icon></span>
-      {{index + 1}} of {{ids.length}}
+      {{index + 1}} of {{entries.length}}
       <span @click="next"><md-icon>chevron_right</md-icon></span>
     </div>
   </script>
@@ -290,23 +308,27 @@
     Vue.component('frwa-pager', {
       template: '#frwa-pager-template',
       props: {
-        id: { type: String },
-        ids: { type: Array, required: true },
+        entry: {},
+        entries: { type: Array, required: true },
       },
       computed: {
         index() {
-          return this.ids.indexOf(this.id)
+          return this.entries.indexOf(this.entry)
         },
       },
       watch: {
         index(newIndex, oldIndex) {
           // adjust the index if it becomes invalid
           if (newIndex >= 0) return
-          if (oldIndex < 0) return
-          if (this.ids.length === 0) return
-          // try to keep the same index
-          let index = Math.min(oldIndex, this.ids.length - 1)
-          this.$emit('update:id', this.ids[index])
+          if (this.entries.length === 0) return
+          let index
+          if (oldIndex < 0) {
+            index = 0
+          } else {
+            // try to keep the same index
+            index = Math.min(oldIndex, this.entries.length - 1)
+          }
+          this.$emit('update:entry', this.entries[index])
         },
       },
       methods: {
@@ -314,21 +336,21 @@
           if (this.index < 0) return
           let newIndex
           if (this.index === 0) {
-            newIndex = this.ids.length - 1
+            newIndex = this.entries.length - 1
           } else {
             newIndex = this.index - 1
           }
-          this.$emit('update:id', this.ids[newIndex])
+          this.$emit('update:entry', this.entries[newIndex])
         },
         next() {
           if (this.index < 0) return
           let newIndex
-          if (this.index === this.ids.length - 1) {
+          if (this.index === this.entries.length - 1) {
             newIndex = 0
           } else {
             newIndex = this.index + 1
           }
-          this.$emit('update:id', this.ids[newIndex])
+          this.$emit('update:entry', this.entries[newIndex])
         },
       },
     })
@@ -354,9 +376,9 @@
           <frwa-svg-face v-for="face in faces" :key="face.id" :face="face" @click="onFaceClick" />
         </svg>
       </div>
-      <frwa-pager :ids="ids" :id="image ? image.id : null" @update:id="loadImage($event)"/>
-      <frwa-people :people="detectedPeople" :clickable="true"/>
-      <frwa-face-dialog :image="image" :face="selectedFace" :active.sync="showFaceDialog"
+      <frwa-pager :entries="ids" :entry="image ? image.id : null" @update:entry="loadImage"/>
+      <frwa-people :people="detectedPeople" :clickable="true" @click="onDetectedPersonClick"/>
+      <frwa-face-dialog :image="image" :faces="faces" :face="selectedFace" :active.sync="showFaceDialog"
         @select:person="onSelectPerson"
         @unselect:person="onUnselectPerson"
         @delete:face="onDeleteFace"/>
@@ -484,7 +506,6 @@
             face: this.selectedFace,
             person: person,
           })
-          this.showFaceDialog = false
         },
         async onUnselectPerson(person) {
           if (!this.selectedFace) return
@@ -495,9 +516,12 @@
         },
         async onDeleteFace(face) {
           await this.$store.dispatch('deleteFace', { face })
-          this.showFaceDialog = false
           let updatedFaces = this.image.detected_faces.filter(id => id !== face.id)
           this.image = { ...this.image, detected_faces: updatedFaces }
+        },
+        onDetectedPersonClick(person) {
+          this.selectedFace = this.faces.find(face => face.person === person.id)
+          this.showFaceDialog = true
         },
       },
     })
