@@ -10,6 +10,30 @@ class Region:
         self.top = top
         self.right = right
         self.bottom = bottom
+    
+    @property
+    def width(self):
+        return self.right - self.left
+    
+    @property
+    def height(self):
+        return self.bottom - self.top
+    
+    def scale(self, factor: float):
+        xd = round((self.width * (1 - factor)) / 2)
+        yd = round((self.height * (1 - factor)) / 2)
+        return Region(
+            self.left + xd,
+            self.top + yd,
+            self.right - xd,
+            self.bottom - yd)
+    
+    def intersect(self, region):
+        return Region(
+            max(self.left, region.left),
+            max(self.top, region.top),
+            min(self.right, region.right),
+            min(self.bottom, region.bottom))
 
     def __str__(self):
         return 'Region(left={}, top={}, right={}, bottom={})'.format(self.left, self.top, self.right, self.bottom)
@@ -21,6 +45,10 @@ class Region:
     @staticmethod
     def from_dict(d):
         return Region(d['left'], d['top'], d['right'], d['bottom'])
+    
+    @staticmethod
+    def from_image(image: MyImage):
+        return Region(0, 0, image.width, image.height)
 
 
 class Person:

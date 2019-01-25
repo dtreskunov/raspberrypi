@@ -50,17 +50,13 @@ def _get_image_region(aiy_bounding_box: tuple, inference: Size, image: Size) -> 
     'translate inference result into image coordinates'
     box_x, box_y, box_w, box_h = aiy_bounding_box
     scale = _get_scale(inference, image)
-    adjust_factor = 0.9  # seems to improve face_landmarks
-    w = box_w * adjust_factor
-    h = box_h * adjust_factor
-    x = box_x + (box_w - w)/2
-    y = box_y + (box_h - h)/2
+    entire_image_region = Region(0, 0, image.w, image.h)
     return Region(
-        left=max(0, int(scale * x)),
-        top=max(0, int(scale * y)),
-        right=min(image.w, int(scale * (x + w))),
-        bottom=min(image.h, int(scale * (y + h)))
-    )
+        left=int(scale * box_x),
+        top=int(scale * box_y),
+        right=int(scale * (box_x + box_w)),
+        bottom=int(scale * (box_y + box_h))
+    ).intersect(entire_image_region)
 
 class PiCameraInput:
     def __init__(self):

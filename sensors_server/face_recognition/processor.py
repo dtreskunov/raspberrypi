@@ -1,3 +1,6 @@
+from .preview import Preview
+from .image import MyImage
+from .domain_types import Face, InputOutput, Person, Region
 import contextlib
 import logging
 import os
@@ -17,10 +20,9 @@ from .database import DetectedFace as DBFace
 from .database import Image as DBImage
 from .database import Person as DBPerson
 from .database import db_transaction, get_descriptor_person_id_pairs
-from .dlib_wrapper import DlibWrapper
-from .domain_types import Face, InputOutput, Person, Region
-from .image import MyImage
-from .preview import Preview
+from .dlib_wrapper import (DlibCnnFaceDetector, DlibHogFaceDetector,
+                           DlibFaceDescripitorExtractor,
+                           DlibFaceLandmarksExtractor)
 
 logger = logging.getLogger(__name__)
 stopwatch = util.make_stopwatch(logger)
@@ -138,14 +140,42 @@ class SaveAnnotatedImageProcessor(Processor):
             image.save(filename)
 
 
+class RefineFaceDetectionProcessor(Processor):
+    def __init__(self, algorithm='CNN'):
+        if algorithm == 'CNN':
+            self._face_detector = DlibCnnFaceDetector()
+        elif algorithm == 'HOG':
+            self._face_detector = DlibHogFaceDetector()
+        else:
+            raise Exception(
+                'Unsupported face detection algorithm ' + algorithm)
+
+    def process(self, data: InputOutput):
+        if not data or not data.faces:
+            return
+        faces = []
+        for face in data.faces:
+            refined_faces = self._face_detector.get_faces(
+                data.image, face.image_region.scale(0.7))
+            if len(refined_faces) == 1:
+                for refined_face in refined_faces:
+                    refined_face.joy_score = face.joy_score
+                    refined_face.person = face.person
+            logger.debug('refined face region %s into %s', face.image_region, [
+                         rf.image_region for rf in refined_faces])
+            faces += refined_faces
+        data.faces = faces
+
+
 class LandmarkProcessor(Processor):
-    def __init__(self, _dlib: DlibWrapper):
-        self._dlib = _dlib
+    def __init__(self, face_landmarks_model):
+        self._face_landmarks_extractor = DlibFaceLandmarksExtractor(
+            face_landmarks_model)
 
     def _process(self, image: MyImage, face: Face):
-        face.raw_landmarks = self._dlib.get_face_landmarks(
+        face.raw_landmarks = self._face_landmarks_extractor.get_face_landmarks(
             image, face.image_region)
-        face.labeled_landmarks = self._dlib.label_face_landmarks(
+        face.labeled_landmarks = self._face_landmarks_extractor.label_face_landmarks(
             face.raw_landmarks)
 
     def process(self, data: InputOutput):
@@ -156,8 +186,8 @@ class LandmarkProcessor(Processor):
 
 
 class DescriptorProcessor(Processor):
-    def __init__(self, _dlib: DlibWrapper):
-        self._dlib = _dlib
+    def __init__(self):
+        self._face_descriptor_extractor = DlibFaceDescripitorExtractor()
 
     def _process(self, image: MyImage, face: Face):
         if not face.raw_landmarks:
@@ -165,7 +195,7 @@ class DescriptorProcessor(Processor):
                 'raw_landmarks not present - ensure that LandmarkProcessor ' +
                 'is configured before DescriptorProcessor')
             return
-        face.descriptor = self._dlib.get_face_descriptor(
+        face.descriptor = self._face_descriptor_extractor.get_face_descriptor(
             image, face.raw_landmarks)
 
     def process(self, data: InputOutput):
