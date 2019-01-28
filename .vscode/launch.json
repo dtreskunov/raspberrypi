@@ -12,6 +12,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "aio (Integrated Terminal)",
+            "type": "python",
+            "request": "launch",
+            "module": "aio",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/sensors_server",
+            "env": {
+                "PYTHONPATH": "."
+            }
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",

@@ -5,3 +5,4 @@ __pycache__
 src/tests/images/*.jpg
 .vscode/settings.json
 .mypy_cache
+.vscode/.ropeproject
