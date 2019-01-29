@@ -5,7 +5,7 @@ import math
 
 import aioconsole
 
-from .modules import AIOLogger, AIOModule, AIOProducerModule
+from .modules import AIOContextManager, AIOLogger, AIOModule, AIOProducerModule
 from .utils import main
 
 logging.basicConfig(level=logging.DEBUG,
@@ -17,6 +17,20 @@ class TestGen(AIOProducerModule):
     def __init__(self, config={'interval': 1}):
         super(TestGen, self).__init__(config=config)
         self._count = itertools.count()
+        self._running = asyncio.Event()
+        self._running.set()
+
+    @property
+    def running(self):
+        return self._running.is_set()
+
+    @running.setter
+    def running(self, running):
+        logger.debug('Changing running state of %s to %s', self.name, running)
+        if running:
+            self._running.set()
+        else:
+            self._running.clear()
 
     async def on_start(self):
         logger.info('%s: starting...', self.name)
@@ -28,11 +42,14 @@ class TestGen(AIOProducerModule):
         await asyncio.sleep(3)
         logger.info('%s: stopped', self.name)
 
-    async def item(self):
-        await asyncio.sleep(self.config['interval'])
-        n = next(self._count)
-        logger.info('%s: generated %d', self.name, n)
-        return n
+    async def run(self):
+        async with AIOContextManager(self.on_start(), self.on_stop()):
+            while True:
+                await self._running.wait()
+                await asyncio.sleep(self.config['interval'])
+                n = next(self._count)
+                logger.info('%s: generated %d', self.name, n)
+                await self.output(n)
 
 
 class TestDriver(AIOModule):
