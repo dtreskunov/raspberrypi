@@ -1,24 +1,31 @@
 import abc
 import asyncio
 import logging
+import typing
 
 import aiochannel
 
 logger = logging.getLogger(__name__)
 
 
-class AIOShutdownContextManager:
-    def __init__(self, *coros):
-        self._coros = coros
+class AIOContextManager:
+    def __init__(self,
+                 enter_coro: typing.Optional[typing.Coroutine] = None,
+                 exit_coro: typing.Optional[typing.Coroutine] = None):
+        self._enter_coro = enter_coro
+        self._exit_coro = exit_coro
 
-    def __enter__(self):
-        pass
+    async def __aenter__(self):
+        if self._enter_coro:
+            await self._enter_coro
 
-    def __exit__(self, exc_type, exc, tb):
-        async def shutdown_coro():
-            await asyncio.gather(*self._coros)
-        loop = asyncio.get_event_loop()
-        loop.create_task(shutdown_coro())
+    async def __aexit__(self, exc_type, exc, tb):
+        if self._exit_coro:
+            # need to create a separate task, since the current one may have
+            # been cancelled already
+            loop = asyncio.get_event_loop()
+            task = loop.create_task(self._exit_coro)
+            await task
 
 
 class AIOModule(abc.ABC):
@@ -71,14 +78,17 @@ class AIOProducerModule(AIOModule):
         self._channels.append(channel)
         return channel
 
-    async def shutdown(self):
+    async def on_start(self):
+        pass
+
+    async def on_stop(self):
         pass
 
     async def _put_item_into_channel(self, item, channel):
         await channel.put(item)
 
     async def run(self):
-        with AIOShutdownContextManager(self.shutdown()):
+        async with AIOContextManager(self.on_start(), self.on_stop()):
             while True:
                 await self._running.wait()
                 item = await self.item()
@@ -94,6 +104,7 @@ class AIOProducerModule(AIOModule):
 
 class AIOConsumerModule(AIOProducerModule):
     'Consumes from multiple channels and produces filtered output'
+
     def __init__(self, name=None, config=None):
         super(AIOConsumerModule, self).__init__(name, config)
         self._sources = []

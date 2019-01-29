@@ -22,7 +22,8 @@ def _shutdown_handler(loop=asyncio.get_event_loop()):
         task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         loop.run_until_complete(wait_for_tasks(get_pending_tasks()))
-    loop.run_until_complete(wait_for_tasks(get_pending_tasks()))
+    with contextlib.suppress(asyncio.CancelledError):
+        loop.run_until_complete(wait_for_tasks(get_pending_tasks()))
     loop.close()
 
 

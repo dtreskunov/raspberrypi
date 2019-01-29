@@ -18,10 +18,15 @@ class TestGen(AIOProducerModule):
         super(TestGen, self).__init__(config=config)
         self._count = itertools.count()
 
-    async def shutdown(self):
-        logger.info('%s: shutting down...', self.name)
+    async def on_start(self):
+        logger.info('%s: starting...', self.name)
         await asyncio.sleep(3)
-        logger.info('%s: shutdown complete', self.name)
+        logger.info('%s: started', self.name)
+
+    async def on_stop(self):
+        logger.info('%s: stopping...', self.name)
+        await asyncio.sleep(3)
+        logger.info('%s: stopped', self.name)
 
     async def item(self):
         await asyncio.sleep(self.config['interval'])
