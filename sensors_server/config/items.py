@@ -123,6 +123,15 @@ class Configurable(abc.ABC):
                 get_item_and_validated_value(name, serialized_value)
                 for name, serialized_value in serialized_values_by_name.items()
             ])
+        
+        def apply(self, serialized_values_by_name):
+            updated = False
+            validated_values_by_item = self.validated_values_by_item(serialized_values_by_name)
+            for item, value in validated_values_by_item.items():
+                if item.value != value:
+                    item.value = value
+                    updated = True
+            return updated
 
 
     def __init__(self, *config_items):
