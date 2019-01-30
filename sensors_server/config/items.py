@@ -10,10 +10,6 @@ class ConfigItem(abc.ABC):
         self._value = default_value
     
     @property
-    def id(self):
-        return self._name
-    
-    @property
     def name(self):
         return self._name
     
