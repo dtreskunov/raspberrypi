@@ -1,15 +1,62 @@
 import asyncio
+import inspect
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+import aiochannel
 import pip._internal
 
-from aio.modules import AIOConsumerModule
+from aio.modules import AIOInput
 from config.items import Configurable, TypedConfigItem
 from util import retry
 
 
-class MQTTConsumer(Configurable, AIOConsumerModule):        
+class EnableableConsumerModule(AIOInput):
+    def __init__(self, wrapped, restart_on_config_change=True):
+        if not hasattr(wrapped, 'config'):
+            raise ValueError('.config needed')
+        if not hasattr(wrapped.config, 'apply'):
+            raise ValueError('.config.apply needed')
+        if not hasattr(wrapped.config, 'enabled'):
+            raise ValueError('.config.enabled needed')
+        if not hasattr(wrapped.config.enabled, 'value'):
+            raise ValueError('.config.enabled.value needed')
+        self._wrapped = wrapped
+        self._to_wrapped = aiochannel.Channel(maxsize=1)
+        self._from_wrapped = aiochannel.Channel(maxsize=1)
+        self._wrapped.add_input(self._to_wrapped)
+        self._wrapped.add_output(self._from_wrapped)
+        self._wrapped_run_task = None
+    
+    @property
+    def enabled(self):
+        return self._wrapped.config.enabled.value
+    
+    @property
+    def wrapped(self):
+        return self._wrapped
+
+    async def apply_config(self, config_values):
+        updated = self._wrapped.config.apply(config_values)
+        if updated:
+            if self._wrapped_run_task:
+                self._wrapped_run_task.cancel()
+                await asyncio.wait([self._wrapped_run_task])
+            if self._wrapped.config.enabled.value:
+                self._wrapped_run_task = asyncio.ensure_future(self._wrapped.run())
+
+    async def consume(self, item):
+        if self.enabled:
+            if not self._wrapped_run_task or self._wrapped_run_task.cancelled():
+                raise RuntimeError('Wrapper is enabled, but the wrapped module is not running')
+            await self._to_wrapped.put(item)
+        else:
+            return item
+
+    
+
+
+class MQTTConsumer(Configurable, AIOModule, AIOInput):        
     def __init__(self):
         Configurable.__init__(self,
             TypedConfigItem(
@@ -30,23 +77,12 @@ class MQTTConsumer(Configurable, AIOConsumerModule):
                     description='MQTT broker port number',
                     default_value=1883,
                     item_type=int))
-        self._task = None
-        self._executor = ThreadPoolExecutor(1)
     
-    async def apply_config(self, config_values):
-        updated = self.config.apply(config_values)
-        if updated:
-            if self._task:
-                self._task.cancel()
-                await asyncio.wait([self._task])
-            if self.config.enabled.value:
-                self._task = asyncio.ensure_future(self.run())
-
     async def on_start(self):
         do_imports()
     async def on_stop(self):
         pass
-    async def consume(self, item):
+    async def run(self):
         pass
 
 def pip_install(*modules):
