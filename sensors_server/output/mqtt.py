@@ -4,7 +4,6 @@ from aio.modules import AIOConsumerModule
 from config.items import Configurable, TypedConfigItem
 from util import do_imports
 
-import hbmqtt.client
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +27,8 @@ class MQTTPublisher(AIOConsumerModule, Configurable):
 
     async def on_start(self):
         # https://hbmqtt.readthedocs.io/en/latest
-        do_imports('hbmqtt', 'hbmqtt.client')
+        await do_imports('hbmqtt', 'hbmqtt.client')
+        import hbmqtt.client
         self._client = hbmqtt.client.MQTTClient()
         logging.info('Connecting to %s', self.config.uri.value)
         await self._client.connect(self.config.uri.value)

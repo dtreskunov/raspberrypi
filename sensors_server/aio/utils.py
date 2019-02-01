@@ -46,7 +46,10 @@ def _shutdown_handler(loop=None):
 
 def main(async_main):
     if sys.platform == 'win32':
-        loop = asyncio.get_event_loop()
+        # need to use ProactorEventLoop to support asyncio.subprocess_exec
+        # https://docs.python.org/3/library/asyncio-eventloops.html#windows
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
 
         # https://stackoverflow.com/questions/27480967/why-does-the-asyncios-event-loop-suppress-the-keyboardinterrupt-on-windows
         async def wakeup():

@@ -1,13 +1,16 @@
 import argparse
 import asyncio
+import asyncio.subprocess
 import contextlib
 import distutils.util
+import functools
+import importlib
+import inspect
 import logging
 import re
+import sys
 import time
 import warnings
-
-import pip._internal
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +28,47 @@ def make_stopwatch(logger):
     return stopwatch
 
 
-def retry(remedy_func=None, exceptions=Exception, times=1):
+def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
     exceptions = exceptions if type(exceptions) == list else (exceptions,)
 
     def decorator(func):
-        def wrapper(*args, **kwargs):
-            _times = times
-            while True:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    if not _times > 0 or not isinstance(e, exceptions):
-                        raise
-                    logger.info(
-                        'Caught exception "%s", will retry %d time(s)', e, _times)
-                    _times -= 1
-                    if remedy_func:
-                        remedy_func()
-        return wrapper
+        remedy_func_is_async = inspect.iscoroutinefunction(remedy_func)
+        func_is_async = inspect.iscoroutinefunction(func)
+        if remedy_func_is_async != func_is_async:
+            raise ValueError(
+                'Wrapped and remedy functions must both be either plain or async')
+        if func_is_async:
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                _times = times
+                while True:
+                    try:
+                        return await func(*args, **kwargs)
+                    except Exception as e:
+                        if not _times > 0 or not isinstance(e, exceptions):
+                            raise
+                        logger.info(
+                            'Caught exception "%s", will retry %d time(s)', e, _times)
+                        _times -= 1
+                        if remedy_func:
+                            await remedy_func(*remedy_func_args)
+            return wrapper
+        else:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                _times = times
+                while True:
+                    try:
+                        return func(*args, **kwargs)
+                    except Exception as e:
+                        if not _times > 0 or not isinstance(e, exceptions):
+                            raise
+                        logger.info(
+                            'Caught exception "%s", will retry %d time(s)', e, _times)
+                        _times -= 1
+                        if remedy_func:
+                            remedy_func(*remedy_func_args)
+            return wrapper
 
     return decorator
 
@@ -57,25 +83,31 @@ def lazy_getter(func):
     return getter
 
 
-def do_imports(pip_package, *modules):
-    def pip_install():
-        try:
-            pip._internal.main(['install', '--user', pip_package])
-        except SystemExit as e:
-            if e.code != 0:
-                raise Exception(
-                    'pip install {} exited with code {}'.format(pip_package, e.code))
+async def pip_install(pip_package):
+    log_prefix = 'pip install --user {}'.format(pip_package)
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        '-m', 'pip', 'install', '--user', pip_package,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    while True:
+        data = await process.stdout.readline()
+        if len(data) == 0:
+            break
+        line = data.decode().rstrip()
+        logger.info('%s: %s', log_prefix, line)
+    await process.wait()
+    if process.returncode != 0:
+        raise RuntimeError('{} exited with returncode {}'.format(
+            log_prefix, process.returncode))
 
-    @retry(pip_install, ImportError)
-    def _do_imports():
-        for module in modules:
-            if not re.match('^[a-zA-Z0-9_.]+$', module):
-                raise ValueError(
-                    "This doesn't look like a Python module: {}".format(module))
-        for module in modules:
-            exec('import {}'.format(module))
 
-    _do_imports()
+async def do_imports(pip_package, *modules):
+    @retry(pip_install, ImportError, 1, pip_package)
+    async def _do_imports():
+        for module in modules:
+            importlib.import_module(module)
+    await _do_imports()
 
 
 class CLI:
