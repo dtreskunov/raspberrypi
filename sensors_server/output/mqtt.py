@@ -64,10 +64,16 @@ if __name__ == '__main__':
                         format='%(asctime)-15s %(levelname)s [%(filename)s:%(lineno)d][%(process)d:%(threadName)s] %(message)s')
 
     async def async_main():
+        logger.info(''''
+            Sleeping for 5 seconds... Use the following command to receive test messages:
+
+            hbmqtt_sub --url mqtt://test.mosquitto.org -t dtreskunov
+        ''')
+        await asyncio.sleep(5)
+
         channel = aiochannel.Channel(maxsize=1)
         mqtt = MQTTPublisher().start()
         mqtt.add_input(channel)
-
         while True:
             await channel.put({'topic': 'dtreskunov', 'payload': b'Hello, world!'})
             await asyncio.sleep(1)
