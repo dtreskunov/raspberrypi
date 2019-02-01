@@ -1,96 +1,75 @@
-import asyncio
-import inspect
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+import logging
 
-import aiochannel
-import pip._internal
-
-from aio.modules import AIOInput
+from aio.modules import AIOConsumerModule
 from config.items import Configurable, TypedConfigItem
-from util import retry
+from util import do_imports
+
+import hbmqtt.client
+logger = logging.getLogger(__name__)
 
 
-class EnableableConsumerModule(AIOInput):
-    def __init__(self, wrapped, restart_on_config_change=True):
-        if not hasattr(wrapped, 'config'):
-            raise ValueError('.config needed')
-        if not hasattr(wrapped.config, 'apply'):
-            raise ValueError('.config.apply needed')
-        if not hasattr(wrapped.config, 'enabled'):
-            raise ValueError('.config.enabled needed')
-        if not hasattr(wrapped.config.enabled, 'value'):
-            raise ValueError('.config.enabled.value needed')
-        self._wrapped = wrapped
-        self._to_wrapped = aiochannel.Channel(maxsize=1)
-        self._from_wrapped = aiochannel.Channel(maxsize=1)
-        self._wrapped.add_input(self._to_wrapped)
-        self._wrapped.add_output(self._from_wrapped)
-        self._wrapped_run_task = None
-    
-    @property
-    def enabled(self):
-        return self._wrapped.config.enabled.value
-    
-    @property
-    def wrapped(self):
-        return self._wrapped
+class MQTTPublisher(AIOConsumerModule, Configurable):
+    def __init__(self):
+        AIOConsumerModule.__init__(self)
+        Configurable.__init__(self,
+                              TypedConfigItem(
+                                  name='enabled',
+                                  display_name='Enabled',
+                                  description=None,
+                                  default_value=False,
+                                  item_type=bool),
+                              TypedConfigItem(
+                                  name='uri',
+                                  display_name='URI',
+                                  description='MQTT broker URI (mqtt[s]://[username][:password]@host.domain[:port])',
+                                  default_value='mqtt://test.mosquitto.org',
+                                  item_type=str))
+        self._client = None
 
-    async def apply_config(self, config_values):
-        updated = self._wrapped.config.apply(config_values)
-        if updated:
-            if self._wrapped_run_task:
-                self._wrapped_run_task.cancel()
-                await asyncio.wait([self._wrapped_run_task])
-            if self._wrapped.config.enabled.value:
-                self._wrapped_run_task = asyncio.ensure_future(self._wrapped.run())
+    async def on_start(self):
+        # https://hbmqtt.readthedocs.io/en/latest
+        do_imports('hbmqtt', 'hbmqtt.client')
+        self._client = hbmqtt.client.MQTTClient()
+        logging.info('Connecting to %s', self.config.uri.value)
+        await self._client.connect(self.config.uri.value)
+        logging.info('Connected to %s', self.config.uri.value)
+
+    async def on_stop(self):
+        logging.info('Disconnecting from %s', self.config.uri.value)
+        await self._client.disconnect()
+        logging.info('Disconnected from %s', self.config.uri.value)
 
     async def consume(self, item):
-        if self.enabled:
-            if not self._wrapped_run_task or self._wrapped_run_task.cancelled():
-                raise RuntimeError('Wrapper is enabled, but the wrapped module is not running')
-            await self._to_wrapped.put(item)
-        else:
-            return item
+        try:
+            topic = item['topic']
+        except (TypeError, KeyError):
+            logger.debug('Item `%s` had no topic', item)
+            return
+        try:
+            payload = item['payload']
+        except (TypeError, KeyError):
+            logger.debug('Item `%s` had no payload', item)
+            return
+        await self._client.publish(topic, payload)
+        logger.debug('Published to topic `%s` payload `%s`', topic, payload)
 
-    
 
+###
+if __name__ == '__main__':
+    import aio.utils
+    import aiochannel
+    import asyncio
 
-class MQTTConsumer(Configurable, AIOModule, AIOInput):        
-    def __init__(self):
-        Configurable.__init__(self,
-            TypedConfigItem(
-                    name='enabled',
-                    display_name='Enabled',
-                    description=None,
-                    default_value=False,
-                    item_type=bool),
-            TypedConfigItem(
-                    name='host',
-                    display_name='Host',
-                    description='MQTT broker hostname',
-                    default_value='localhost',
-                    item_type=str),
-            TypedConfigItem(
-                    name='port',
-                    display_name='Port',
-                    description='MQTT broker port number',
-                    default_value=1883,
-                    item_type=int))
-    
-    async def on_start(self):
-        do_imports()
-    async def on_stop(self):
-        pass
-    async def run(self):
-        pass
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)-15s %(levelname)s [%(filename)s:%(lineno)d][%(process)d:%(threadName)s] %(message)s')
 
-def pip_install(*modules):
-    try:
-        pip._internal.main(['install', '--user'] + modules)
-    except SystemExit as e:
-        raise RuntimeError('Unable to pip install {}: {}'.format(modules, e))
+    async def async_main():
+        channel = aiochannel.Channel(maxsize=1)
+        mqtt = MQTTPublisher().start()
+        mqtt.add_input(channel)
 
-@util.retry(partial(pip_install, 'paho-mqtt'), ImportError)
-def do_imports():
-    import paho.mqtt.client as mqtt
+        while True:
+            await channel.put({'topic': 'dtreskunov', 'payload': b'Hello, world!'})
+            await asyncio.sleep(1)
+
+    aio.utils.main(async_main)

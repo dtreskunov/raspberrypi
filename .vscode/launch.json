@@ -23,6 +23,17 @@
             }
         },
         {
+            "name": "output.mqtt (Integrated Terminal)",
+            "type": "python",
+            "request": "launch",
+            "module": "output.mqtt",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/sensors_server",
+            "env": {
+                "PYTHONPATH": "."
+            }
+        },
+        {
             "name": "Python: Attach",
             "type": "python",
             "request": "attach",

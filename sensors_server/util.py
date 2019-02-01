@@ -3,8 +3,11 @@ import asyncio
 import contextlib
 import distutils.util
 import logging
+import re
 import time
 import warnings
+
+import pip._internal
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,27 @@ def lazy_getter(func):
     return getter
 
 
+def do_imports(pip_package, *modules):
+    def pip_install():
+        try:
+            pip._internal.main(['install', '--user', pip_package])
+        except SystemExit as e:
+            if e.code != 0:
+                raise Exception(
+                    'pip install {} exited with code {}'.format(pip_package, e.code))
+
+    @retry(pip_install, ImportError)
+    def _do_imports():
+        for module in modules:
+            if not re.match('^[a-zA-Z0-9_.]+$', module):
+                raise ValueError(
+                    "This doesn't look like a Python module: {}".format(module))
+        for module in modules:
+            exec('import {}'.format(module))
+
+    _do_imports()
+
+
 class CLI:
     def __init__(self, parser=None):
         if not parser:
@@ -64,7 +88,7 @@ class CLI:
             parser.add_argument(
                 '--loglevel', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO')
         self.parser = parser
-    
+
     def _setup(self):
         args = self.parser.parse_args()
         if args.debug:
