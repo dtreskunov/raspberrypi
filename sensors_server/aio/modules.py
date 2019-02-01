@@ -4,6 +4,7 @@ import logging
 import typing
 
 import aiochannel
+from .utils import shutdown_signalled
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,7 @@ class AIOContextManager:
 
 
 class AIOModule(abc.ABC):
-    def __init__(self, name=None):
-        self._name = name or type(self).__name__
+    def __init__(self):
         self._task = None
 
     @property
@@ -51,10 +51,12 @@ class AIOModule(abc.ABC):
 
     def start(self):
         self._task = asyncio.ensure_future(self.run())
+        return self # chainable
 
     def stop(self):
         if self._task is not None:
             self._task.cancel()
+        return self # chainable
     
     async def restart(self):
         self.stop()
@@ -119,57 +121,106 @@ class AIOInput:
         return await self._combined_input.get()
 
 
-class AIOFilterModule(AIOInput, AIOOutput, AIOModule):
+class AIOEnableableModule(AIOModule):
     def __init__(self):
-        AIOInput.__init__(self)
-        AIOOutput.__init__(self)
         AIOModule.__init__(self)
-        self._passthru_task = None
-        self._start_passthru_task()
+        self._noop_task = None
+        self._start_noop_task()
     
-    async def _passthru(self):
-        while True:
-            await self.output(await self.input())
+    @abc.abstractmethod
+    async def noop_loop(self):
+        pass
     
-    def _start_passthru_task(self):
-        self._passthru_task = asyncio.ensure_future(self._passthru())
-    
-    def _stop_passthru_task(self):
-        if self._passthru_task is not None:
-            self._passthru_task.cancel()
-    
-    async def run(self):
-        async def on_start():
-            await self.on_start()
-            self._stop_passthru_task()
-        async def on_stop():
-            self._start_passthru_task()
-            await self.on_stop()
-        async with AIOContextManager(on_start=on_start, on_stop=on_stop):
-            while True:
-                item = await self.input()
-                filtered_item = await self.filter(item)
-                if filtered_item is not None:
-                    await self.output(filtered_item)
-    
+    @abc.abstractmethod
+    async def real_loop(self):
+        pass
+
     async def on_start(self):
         pass
     
     async def on_stop(self):
         pass
+    
+    async def run(self):
+        async def on_start():
+            await self.on_start()
+            self._stop_noop_task()
+        async def on_stop():
+            if not shutdown_signalled():
+                self._start_noop_task()
+            await self.on_stop()
+        async with AIOContextManager(on_start=on_start, on_stop=on_stop):
+            await self.real_loop()
+
+    def _start_noop_task(self):
+        self._noop_task = asyncio.ensure_future(self.noop_loop())
+    
+    def _stop_noop_task(self):
+        if self._noop_task is not None:
+            self._noop_task.cancel()
+
+
+class AIOProducerModule(AIOOutput, AIOEnableableModule):
+    def __init__(self):
+        AIOOutput.__init__(self)
+        AIOEnableableModule.__init__(self)
+    
+    @abc.abstractmethod
+    async def produce(self):
+        pass
+
+    async def noop_loop(self):
+        pass
+    
+    async def real_loop(self):
+        while True:
+            await self.output(await self.produce())
+
+
+class AIOConsumerModule(AIOInput, AIOEnableableModule):
+    def __init__(self):
+        AIOInput.__init__(self)
+        AIOEnableableModule.__init__(self)
+    
+    @abc.abstractmethod
+    async def consume(self, item):
+        pass
+
+    async def noop_loop(self):
+        while True:
+            await self.input()
+    
+    async def real_loop(self):
+        while True:
+            await self.consume(await self.input())
+
+
+class AIOFilterModule(AIOInput, AIOOutput, AIOEnableableModule):
+    def __init__(self):
+        AIOInput.__init__(self)
+        AIOOutput.__init__(self)
+        AIOEnableableModule.__init__(self)
 
     @abc.abstractmethod
     async def filter(self, item):
         pass
-
-class AIOLogger(AIOModule, AIOInput, AIOOutput):
-    def __init__(self):
-        AIOModule.__init__(self)
-        AIOInput.__init__(self)
-        AIOOutput.__init__(self)
-
-    async def run(self):
+    
+    async def noop_loop(self):
         while True:
+            await self.output(await self.input())
+
+    async def real_loop(self):
+        while True:    
             item = await self.input()
-            logger.info('%s: %s', self.name, item)
-            await self.output(item)
+            filtered_item = await self.filter(item)
+            if filtered_item is not None:
+                await self.output(filtered_item)
+
+
+class AIOLogger(AIOConsumerModule):
+    def __init__(self, name):
+        AIOConsumerModule.__init__(self)
+        self._name = name
+
+    async def consume(self, item):
+        logger.info('%s: %s', self._name, item)

@@ -8,22 +8,39 @@ import aiorun
 
 logger = logging.getLogger(__name__)
 
+_shutdown_env_key = __name__ + 'SHUTDOWN_SIGNALLED'
+_shutdown_env_val = 'abracadabra'
 
-def _shutdown_handler(loop=asyncio.get_event_loop()):
+def shutdown_signalled():
+    return os.environ.get(_shutdown_env_key) == _shutdown_env_val
+
+def _signal_shutdown():
+    os.environ[_shutdown_env_key] = _shutdown_env_val
+
+def _shutdown_handler(loop=None):
     def get_pending_tasks():
         return [task for task in asyncio.Task.all_tasks(loop) if not task.cancelled()]
 
     async def wait_for_tasks(tasks):
         logger.debug('Waiting for %d tasks...', len(tasks))
-        await asyncio.gather(*tasks)
-        logger.debug('Tasks finished')
+        try:
+            await asyncio.gather(*tasks)
+            logger.debug('All awaited tasks finished')
+        except asyncio.CancelledError:
+            logger.debug('Got cancelled')
+            raise
+
+    _signal_shutdown()
+
+    if loop is None:
+        loop = asyncio.get_event_loop()
 
     for task in get_pending_tasks():
         task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        loop.run_until_complete(wait_for_tasks(get_pending_tasks()))
+        loop.run_until_complete(asyncio.shield(wait_for_tasks(get_pending_tasks())))
     with contextlib.suppress(asyncio.CancelledError):
-        loop.run_until_complete(wait_for_tasks(get_pending_tasks()))
+        loop.run_until_complete(asyncio.shield(wait_for_tasks(get_pending_tasks())))
     loop.close()
 
 

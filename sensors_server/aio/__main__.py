@@ -6,7 +6,7 @@ import math
 import aioconsole
 
 from .modules import (AIOContextManager, AIOFilterModule, AIOLogger, AIOModule,
-                      AIOOutput)
+                      AIOOutput, AIOProducerModule)
 from .utils import main
 
 logging.basicConfig(level=logging.DEBUG,
@@ -14,10 +14,9 @@ logging.basicConfig(level=logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 
-class TestGen(AIOModule, AIOOutput):
+class TestGen(AIOProducerModule):
     def __init__(self, interval=1):
-        AIOModule.__init__(self)
-        AIOOutput.__init__(self)
+        AIOProducerModule.__init__(self)
         self._interval = interval
         self._count = itertools.count()
 
@@ -30,22 +29,20 @@ class TestGen(AIOModule, AIOOutput):
         self._interval = interval
     
     async def on_start(self):
-        logger.info('%s: starting...', self.name)
+        logger.info('TestGen: starting...')
         await asyncio.sleep(3)
-        logger.info('%s: started', self.name)
+        logger.info('TestGen: started')
 
     async def on_stop(self):
-        logger.info('%s: stopping...', self.name)
+        logger.info('TestGen: stopping...')
         await asyncio.sleep(3)
-        logger.info('%s: stopped', self.name)
+        logger.info('TestGen: stopped')
 
-    async def run(self):
-        async with AIOContextManager(self.on_start, self.on_stop):
-            while True:
-                await asyncio.sleep(self.interval)
-                n = next(self._count)
-                logger.info('%s: generated %d', self.name, n)
-                await self.output(n)
+    async def produce(self):
+        await asyncio.sleep(self.interval)
+        n = next(self._count)
+        logger.info('TestGen: generated %d', n)
+        return n
 
 class TestFilter(AIOFilterModule):
     async def on_start(self):
@@ -68,58 +65,65 @@ class TestDriver(AIOModule):
     def __init__(self):
         AIOModule.__init__(self)
 
-    async def control(self, gen):
-        async def print_help():
-            await aioconsole.aprint('Enter a number to control TestGen interval (empty will pause/resume)')
-        await print_help()
-        while True:
-            s = await aioconsole.ainput()
-            if len(s) == 0:
-                if gen.running:
-                    logger.info('%s: calling gen.stop()', self.name)
-                    gen.stop()
-                else:
-                    logger.info('%s: calling gen.start()', self.name)
-                    gen.start()
-            elif s == 'r':
-                logger.info('%s: calling gen.restart()', self.name)
-                await gen.restart()
-            else:
-                try:
-                    interval = float(s)
-                    gen.interval = interval
-                except ValueError:
-                    await print_help()
-
     async def run(self):
-        gen = TestGen()
-        log1 = AIOLogger()
-        log1.name = 'log1'
+        gen = TestGen().start()
+        log1 = AIOLogger('log1').start()
         log1.add_input(gen.add_output())
-        log2 = AIOLogger()
-        log2.name = 'log2'
+        log2 = AIOLogger('log2').start()
         log2.add_input(gen.add_output())
-        log3 = AIOLogger()
-        log3.name = 'log3'
-        log3.add_input(log2.add_output())
-        log4 = AIOLogger()
-        log4.name = 'log4'
+        log3 = AIOLogger('log3').start()
         fil = TestFilter()
         fil.add_input(gen.add_output())
-        log4.add_input(fil.add_output())
-        log1.start()
-        log2.start()
-        log3.start()
-        gen.start()
+        log3.add_input(fil.add_output())
 
-        asyncio.ensure_future(self.control(gen))
+        async def control():
+            async def print_help():
+                await aioconsole.aprint('''
+                    Enter a number to set TestGen interval,
+                    <Ret> to stop/start TestGen,
+                    <r> to restart TestGen,
+                    <f> to stop/start TestFilter,
+                    <l> to stop/start log1
+                ''')
+            await print_help()
+            while True:
+                s = await aioconsole.ainput()
+                if len(s) == 0:
+                    if gen.running:
+                        logger.info('TestDriver: calling gen.stop()')
+                        gen.stop()
+                    else:
+                        logger.info('TestDriver: calling gen.start()')
+                        gen.start()
+                elif s == 'r':
+                    logger.info('TestDriver: calling gen.restart()')
+                    await gen.restart()
+                elif s == 'f':
+                    if fil.running:
+                        logger.info('TestDriver: calling fil.stop()')
+                        fil.stop()
+                    else:
+                        logger.info('TestDriver: calling fil.start()')
+                        fil.start()
+                elif s == 'l':
+                    if log1.running:
+                        logger.info('TestDriver: calling log1.stop()')
+                        log1.stop()
+                    else:
+                        logger.info('TestDriver: calling log1.start()')
+                        log1.start()
+                else:
+                    try:
+                        interval = float(s)
+                        gen.interval = interval
+                    except ValueError:
+                        await print_help()
+        asyncio.ensure_future(control())
         await asyncio.sleep(math.inf)
 
 
 async def async_main():
-    driver = TestDriver()
-    driver.start()
-    await driver.wait()
+    await TestDriver().start().wait()
 
 if __name__=='__main__':
     main(async_main)
