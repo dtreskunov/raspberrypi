@@ -47,8 +47,8 @@ def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
                     except Exception as e:
                         if not _times > 0 or not isinstance(e, exceptions):
                             raise
-                        logger.info(
-                            'Caught exception "%s", will retry %d time(s)', e, _times)
+                        logger.debug(
+                            'Caught %s, will retry %d time(s)', repr(e), _times)
                         _times -= 1
                         if remedy_func:
                             await remedy_func(*remedy_func_args)
@@ -63,8 +63,8 @@ def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
                     except Exception as e:
                         if not _times > 0 or not isinstance(e, exceptions):
                             raise
-                        logger.info(
-                            'Caught exception "%s", will retry %d time(s)', e, _times)
+                        logger.debug(
+                            'Caught %s, will retry %d time(s)', repr(e), _times)
                         _times -= 1
                         if remedy_func:
                             remedy_func(*remedy_func_args)
