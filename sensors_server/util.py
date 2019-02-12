@@ -5,10 +5,10 @@ import contextlib
 import distutils.util
 import functools
 import importlib
-import inspect
 import logging
 import re
 import sys
+import threading
 import time
 import warnings
 
@@ -28,12 +28,36 @@ def make_stopwatch(logger):
     return stopwatch
 
 
+def serialize():
+    '''
+    Decorator that makes sure that the decorated function (regular or async) is executed
+    in serial, i.e. there will be no concurrent execution.
+    '''
+    def decorator(func):
+        func_is_async = asyncio.iscoroutinefunction(func)
+        if func_is_async:
+            lock = asyncio.Lock()
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                async with lock:
+                    return await func(*args, **kwargs)
+            return wrapper
+        else:
+            lock = threading.Lock()
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                with lock:
+                    return func(*args, **kwargs)
+            return wrapper
+    return decorator
+
+
 def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
     exceptions = exceptions if type(exceptions) == list else (exceptions,)
 
     def decorator(func):
-        remedy_func_is_async = inspect.iscoroutinefunction(remedy_func)
-        func_is_async = inspect.iscoroutinefunction(func)
+        remedy_func_is_async = asyncio.iscoroutinefunction(remedy_func)
+        func_is_async = asyncio.iscoroutinefunction(func)
         if remedy_func_is_async != func_is_async:
             raise ValueError(
                 'Wrapped and remedy functions must both be either plain or async')
@@ -83,6 +107,7 @@ def lazy_getter(func):
     return getter
 
 
+@serialize()
 async def pip_install(pip_package):
     log_prefix = 'pip install --user {}'.format(pip_package)
     process = await asyncio.create_subprocess_exec(
