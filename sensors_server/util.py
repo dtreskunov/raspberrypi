@@ -7,6 +7,7 @@ import functools
 import importlib
 import logging
 import re
+import site
 import sys
 import threading
 import time
@@ -70,6 +71,8 @@ def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
                         return await func(*args, **kwargs)
                     except Exception as e:
                         if not _times > 0 or not isinstance(e, exceptions):
+                            logger.warning(
+                                'Caught %s, re-raising (not retrying)', repr(e))
                             raise
                         logger.debug(
                             'Caught %s, will retry %d time(s)', repr(e), _times)
@@ -86,6 +89,8 @@ def retry(remedy_func=None, exceptions=Exception, times=1, *remedy_func_args):
                         return func(*args, **kwargs)
                     except Exception as e:
                         if not _times > 0 or not isinstance(e, exceptions):
+                            logger.warning(
+                                'Caught %s, re-raising (not retrying)', repr(e))
                             raise
                         logger.debug(
                             'Caught %s, will retry %d time(s)', repr(e), _times)
@@ -107,12 +112,9 @@ def lazy_getter(func):
     return getter
 
 
-@serialize()
-async def pip_install(pip_package):
-    log_prefix = 'pip install --user {}'.format(pip_package)
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        '-m', 'pip', 'install', '--user', pip_package,
+async def run_command(program, *args, raise_on_nonzero_return_code=True):
+    log_prefix = '{} {}'.format(program, ' '.join(args))
+    process = await asyncio.create_subprocess_exec(program, *args,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
     while True:
@@ -122,9 +124,23 @@ async def pip_install(pip_package):
         line = data.decode().rstrip()
         logger.info('%s: %s', log_prefix, line)
     await process.wait()
-    if process.returncode != 0:
+    logger.info('%s exited with returncode %d', log_prefix, process.returncode)
+    if raise_on_nonzero_return_code and process.returncode != 0:
         raise RuntimeError('{} exited with returncode {}'.format(
             log_prefix, process.returncode))
+    return process.returncode
+
+
+@serialize()
+async def pip_install(pip_package):
+    await run_command(
+        sys.executable,
+        '-m', 'pip', 'install', '--user', pip_package)
+    user_site_packages = site.getusersitepackages()
+    if user_site_packages not in sys.path:
+        sys.path.append(user_site_packages)
+        logger.info('Added %s to sys.path: %s', user_site_packages, sys.path)
+    importlib.invalidate_caches()
 
 
 async def do_imports(pip_package, *modules):
@@ -132,6 +148,7 @@ async def do_imports(pip_package, *modules):
     async def _do_imports():
         for module in modules:
             importlib.import_module(module)
+            logger.debug('Imported module %s', module)
     await _do_imports()
 
 

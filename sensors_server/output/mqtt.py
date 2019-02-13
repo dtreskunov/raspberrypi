@@ -21,7 +21,7 @@ class MQTTPublisher(AIOConsumerModule, Configurable):
                                   name='uri',
                                   display_name='URI',
                                   description='MQTT broker URI (mqtt[s]://[username][:password]@host.domain[:port])',
-                                  default_value='mqtt://test.mosquitto.org',
+                                  default_value='mqtt://iot.eclipse.org',
                                   item_type=str))
         self._client = None
 
@@ -56,6 +56,12 @@ class MQTTPublisher(AIOConsumerModule, Configurable):
 
 ###
 if __name__ == '__main__':
+    # import ptvsd
+    # address = ('0.0.0.0', 5678)
+    # ptvsd.enable_attach(address=address)
+    # print('Waiting for debugger on {}...'.format(address))
+    # ptvsd.wait_for_attach()
+
     import aio.utils
     import aiochannel
     import asyncio
